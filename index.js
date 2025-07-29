@@ -21,6 +21,7 @@ app.post('/webhooks', async (req, res) => {
     Logger.info(`${provider.constructor.name} provider activated`, JSON.stringify(req.body, null, 2));
     const pullRequestData = provider.fetchPullRequestData();
     res.status(200).send('Webhook request processed');
+
 });
 
 app.listen(PORT, () => {
