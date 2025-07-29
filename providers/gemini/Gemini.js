@@ -9,10 +9,18 @@ const allowedGeminiActionsMap = {
 export async function doGeminiResponse(diff, description, actionType = 'review') {
     if (!allowedGeminiActionsMap.hasOwnProperty(actionType)) throw "Bad action type";
     const prompt = ```
+        Global Instructions: 
         ${process.env.BASE_INSTRUCTIONS} 
+
+        Action Instructions: 
         ${process.env[allowedGeminiActionsMap[actionType]]} 
-        Diff: ${diff}
-        Description: ${description}
+
+
+        Diff: 
+        ${diff}
+
+        Description: 
+        ${description}
     ```;
     const model = genAI.getGenerativeModel({ model: process.env.GEMINI_MODEL });
     const result = await model.generateContent(prompt);
