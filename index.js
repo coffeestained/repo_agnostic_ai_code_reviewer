@@ -1,8 +1,8 @@
 // Code Review Bot Entry Point (Node.js / Express)
 // File: index.js
 import express from 'express';
-import { Core } from './providers/Core';
-import('dotenv').then(dotenv => dotenv.config());
+import { Core } from './providers/Core.js';
+import 'dotenv/config';
 
 const coreService = new Core();
 
@@ -13,18 +13,11 @@ app.use(express.json());
 
 app.get('/health', (_, res) => res.status(200).send('OK'));
 
-app.post('/webhook/open-review', async (req, res) => {
+app.post('/webhooks', async (req, res) => {
     const provider = coreService.parseProviderFromRequest(req);
     if (!provider) throw "Bad Request";
     const pullRequestData = provider.fetchPullRequestData();
-    res.status(200).send('Open-Review received');
-});
-
-app.post('/webhook/comment', async (req, res) => {
-    const provider = coreService.parseProviderFromRequest(req);
-    if (!provider) throw "Bad Request";
-    const pullRequestData = provider.fetchPullRequestData();
-    res.status(200).send('Comment received');
+    res.status(200).send('Webhook request processed');
 });
 
 app.listen(PORT, () => {

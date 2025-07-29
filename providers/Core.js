@@ -1,6 +1,6 @@
-import { GitHubProvider } from '../github/GitHubProvider.js';
-import { GitLabProvider } from '../gitlab/GitLabProvider.js';
-import { BitbucketProvider } from '../bitbucket/BitbucketProvider.js';
+import { GitHubProvider } from './github/GitHubProvider.js';
+import { GitLabProvider } from './gitlab/GitLabProvider.js';
+import { BitbucketProvider } from './bitbucket/BitbucketProvider.js';
 
 export class Core {
     providers = {};
