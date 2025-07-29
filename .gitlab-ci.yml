@@ -1,0 +1,32 @@
+# ========================
+# GitLab CI for Cloud Run
+# ========================
+
+variables:
+  GCP_PROJECT_ID: your-gcp-project-id
+  GCP_REGION: us-central1
+  SERVICE_NAME: gemini-reviewer
+  IMAGE_NAME: gcr.io/$GCP_PROJECT_ID/$SERVICE_NAME
+
+stages:
+  - build
+  - deploy
+
+build:
+  stage: build
+  image: gcr.io/cloud-builders/docker
+  script:
+    - docker build -t $IMAGE_NAME .
+    - docker push $IMAGE_NAME
+
+deploy:
+  stage: deploy
+  image: google/cloud-sdk:latest
+  script:
+    - gcloud auth activate-service-account --key-file=$GOOGLE_APPLICATION_CREDENTIALS
+    - gcloud config set project $GCP_PROJECT_ID
+    - gcloud run deploy $SERVICE_NAME \
+        --image $IMAGE_NAME \
+        --platform managed \
+        --region $GCP_REGION \
+        --allow-unauthenticated

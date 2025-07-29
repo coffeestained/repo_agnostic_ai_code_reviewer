@@ -1,0 +1,46 @@
+# ==========================
+# GitHub Actions for Cloud Run
+# ==========================
+
+name: Deploy to Cloud Run
+
+env:
+  GCP_PROJECT_ID: your-gcp-project-id
+  GCP_REGION: us-central1
+  SERVICE_NAME: gemini-reviewer
+  IMAGE_NAME: gcr.io/${{ env.GCP_PROJECT_ID }}/${{ env.SERVICE_NAME }}
+
+on:
+  push:
+    branches: [ main ]
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.GCP_CREDENTIALS }}
+
+      - name: Set up gcloud
+        uses: google-github-actions/setup-gcloud@v2
+        with:
+          project_id: ${{ env.GCP_PROJECT_ID }}
+
+      - name: Build and push Docker image
+        run: |
+          docker build -t $IMAGE_NAME .
+          docker push $IMAGE_NAME
+
+      - name: Deploy to Cloud Run
+        run: |
+          gcloud run deploy $SERVICE_NAME \
+            --image $IMAGE_NAME \
+            --platform managed \
+            --region $GCP_REGION \
+            --allow-unauthenticated
