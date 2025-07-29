@@ -8,6 +8,10 @@ A bot that auto-reviews pull/merge requests using Gemini AI.
 - Adds itself as a reviewer if not already.
 - Uses Gemini to scan diffs and post review comments.
 
+## Notes
+
+- Tokens for GitHub Require READ access for Repositories and Commits. They require READ & WRITE for pull-requests.
+
 ## To Use
 
 1. Add `.env` config with platform and Gemini tokens.
