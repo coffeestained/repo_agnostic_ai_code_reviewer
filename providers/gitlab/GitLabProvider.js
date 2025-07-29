@@ -1,26 +1,36 @@
+import { HttpProvider } from '../http/HttpProvider.js';
+
 export class GitLabProvider {
-    /**
-     * Validates that we have access to this repo
-     */
-    validateAccess(req) { }
+    constructor() {
+        this.http = new HttpProvider({
+            Authorization: `Bearer ${process.env.GITLAB_TOKEN}`,
+        });
+    }
 
-    /**
-     * Extracts pull request data from the GitLab webhook request
-     */
-    fetchPullRequestData(req) { }
+    validateAccess(req) {
+        // TODO: Implement access validation if needed
+    }
 
-    /**
-     * Returns the assignee username from the webhook request
-     */
-    getAssignee(req) { }
+    async fetchPullRequestData(req) {
+        const diffUrl = req.body?.object_attributes?.diff_url || req.body?.object_attributes?.url + '/diffs';
+        if (!diffUrl) throw new Error('Missing diff_url in payload');
 
-    /**
-     * Returns the repository URL from the webhook request
-     */
-    getRepoUrl(req) { }
+        const response = await this.http.get(diffUrl, {
+            Accept: 'application/json'
+        });
+        return { diff: response.data };
+    }
 
-    /**
-     * Parses and returns the comment list in tree format
-     */
-    getCommentTree(req) { }
+    getAssignee(req) {
+        return req.body?.assignee?.username || null;
+    }
+
+    getRepoUrl(req) {
+        return req.body?.repository?.homepage || null;
+    }
+
+    getCommentTree(req) {
+        // TODO: Parse comment tree from GitLab webhook payload
+        return [];
+    }
 }
