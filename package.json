@@ -1,5 +1,15 @@
 {
+  "name": "repo_agnostic_ai_code_reviewer",
+  "version": "1.0.0",
+  "description": "AI-powered code reviewer for GitHub, GitLab, and Bitbucket",
   "type": "module",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js"
+  },
+  "engines": {
+    "node": ">=20.0.0"
+  },
   "dependencies": {
     "@google/generative-ai": "^0.24.1",
     "axios": "^1.11.0",
