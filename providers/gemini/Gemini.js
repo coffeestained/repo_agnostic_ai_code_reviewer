@@ -15,7 +15,6 @@ export async function doGeminiResponse(diff, description, actionType = 'review')
         Action Instructions: 
         ${process.env[allowedGeminiActionsMap[actionType]]} 
 
-
         Diff: 
         ${diff}
 
