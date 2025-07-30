@@ -1,10 +1,13 @@
 import { HttpProvider } from '../http/HttpProvider.js';
 
 export class BitbucketProvider {
-    constructor() {
+    constructor(req, action) {
         this.http = new HttpProvider({
             Authorization: `Bearer ${process.env.BITBUCKET_TOKEN}`,
         });
+
+        this.action = action;
+        this._processRequest(req);
     }
 
     validateAccess(req) {

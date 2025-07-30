@@ -3,12 +3,11 @@ PORT=8080
 LOG_LEVEL=debug
 
 # GitHub
+GITHUB_AGENT_USER=coffeestained
 GITHUB_TOKEN=ghp_...
-GITHUB_OWNER=your-org
 
 # GitLab
 GITLAB_TOKEN=glpat-...
-GITLAB_OWNER=your-group
 
 # Bitbucket (Handler not tested at this time)
 BITBUCKET_USERNAME=your-user
