@@ -1,10 +1,12 @@
 import { HttpProvider } from '../http/HttpProvider.js';
+import { doGeminiResponse } from '../gemini/Gemini.js';
 import { Logger } from '../../lib/logger.js';
 
 export class GitHubProvider {
     action;
     raw;
     repoUrl;
+    pullRequestUrl;
 
     description;
     comments = [];
@@ -13,11 +15,13 @@ export class GitHubProvider {
     constructor(req, action) {
         this.http = new HttpProvider({
             Authorization: `Bearer ${process.env.GITHUB_TOKEN}`,
+            Accept: "application/vnd.github.v3+json"
         });
 
         this.raw = req;
         this.action = action;
         this.repoUrl = req.body.repository.url;
+        this.pullRequestUrl = req.body.pull_request.url;
 
         this.processRequest(req);
     }
@@ -43,8 +47,18 @@ export class GitHubProvider {
         }
 
         if (!(await this.validateAction())) return;
-        Logger.info(`Action is required. Proceeding to NL generation.`);
+
+        Logger.info(`Provider action is required. Proceeding to NL generation.`);
+        const response = await doGeminiResponse(this.diff, this.description, this.action, this.comments);
+        Logger.info(`Provider action processed. Proceeding to post-processing.`);
+        Logger.info(`Provider action processed. Proceeding to post-processing. ${response}`);
+
+        await this.addBotAsReviewer(process.env.GITHUB_AGENT_USER);
+        await this.doPostProcessingActions(response);
     }
+
+    /////////////////////////////////////
+    // TRANSFOMATION SECTION ------------
 
     /**
      * Processes a GitHub pull_request webhook, fetches all associated comments
@@ -63,16 +77,12 @@ export class GitHubProvider {
         const reviewCommentsUrl = pr.review_comments_url;
         const reviewsUrl = `https://api.github.com/repos/${repo.full_name}/pulls/${prNumber}/reviews`;
 
-        const headers = {
-            'Accept': 'application/vnd.github.v3+json',
-        };
-
         try {
             // 2. Make parallel API calls to fetch all three content types.
             const [issueComments, reviewComments, reviews] = (await Promise.all([
-                this.http.get(issueCommentsUrl, { headers }),
-                this.http.get(reviewCommentsUrl, { headers }),
-                this.http.get(reviewsUrl, { headers })
+                this.http.get(issueCommentsUrl, {}),
+                this.http.get(reviewCommentsUrl, {}),
+                this.http.get(reviewsUrl, {})
             ])).map((response) => response.data);
 
             // 3. Transform review summary objects into our standard comment format.
@@ -153,32 +163,36 @@ export class GitHubProvider {
         return tree;
     }
 
+    /////////////////////////////////////
+    // VALIDATION SECTION ---------------
+
     /**
      * Validates that an action is needed for this action, comment chain and diff.
      */
     async validateAction() {
-        const sortedComments = this.comments.sort((a, b) =>
-            new Date(b.creationTime) - new Date(a.creationTime)
-        );
         if (this.action === 'initial') {
-            const hasAgentDoneInitialReview = sortedComments.some((comment) => comment.username === process.env.GITHUB_AGENT_USER);
+            const hasAgentDoneInitialReview = this.comments.some((comment) => comment.userName === process.env.GITHUB_AGENT_USER);
             if (!hasAgentDoneInitialReview) {
+                Logger.info('Provider should do the initial review');
                 return true;
             }
         } else if (this.action === 'comment') {
-            const hasCommentChainRequiringResponse = sortedComments.some((comment) => comment.username === process.env.GITHUB_AGENT_USER);
+            const hasCommentChainRequiringResponse = this.comments.some((comment) => comment.userName === process.env.GITHUB_AGENT_USER);
             if (!hasCommentChainRequiringResponse) {
+                Logger.info('Provider should respond to latest comment or resolve and approve');
                 return true;
             }
         }
+        Logger.info('Provider has no action required');
         return false;
     }
 
+    /**
+     * Validates that an action can be authorized for this request.
+     */
     async validateAuth() {
         try {
-            const res = await this.http.get(this.repoUrl, {
-                Accept: "application/vnd.github.v3+json"
-            });
+            const res = await this.http.get(this.repoUrl, {});
             // 200 Access Granted to Repo
             return res.status === 200;
         } catch (err) {
@@ -186,6 +200,84 @@ export class GitHubProvider {
                 return false;
             }
             return false; // Fallback
+        }
+    }
+
+    /////////////////////////////////////
+    // POST PROCESSING SECTION ----------
+
+    /**
+     * Posts a general comment on the pull request (not tied to a line of code).
+     */
+    async leaveIssueComment(body) {
+        const url = `${this.raw.body.pull_request.issue_url}/comments`;
+        const payload = { body };
+        Logger.info(`Provider posting general issue comment.`);
+        await this.http.post(url, payload);
+    }
+
+    /**
+     * Submits the final pull request review, publishing all pending comments.
+     * @param {string} event - The review action: 'APPROVE', 'COMMENT', or 'REQUEST_CHANGES'.
+     * @param {string} message - The main body message for the review summary.
+     */
+    async submitReview(event, message, comments) {
+        const url = `${this.pullRequestUrl}/reviews`;
+        const payload = {
+            commit_id: this.raw.body.pull_request.head.sha,
+            body: message,
+            event: event,
+            comments
+        };
+        Logger.info(`Provider posting final review with status: ${event}`);
+        await this.http.post(url, payload);
+    }
+
+    /**
+     * Processes the AI response to post comments sequentially and finalize the review.
+     * @param {object} response The response object from the Gemini AI.
+     */
+    async doPostProcessingActions(response) {
+        Logger.info(`Provider starting post-processing for AI response.`);
+        const reviewComments = [];
+
+        if (Array.isArray(response.comments)) {
+            for (const comment of response.comments) {
+                if (comment.path && comment.line) {
+                    reviewComments.push({ ...comment, path: comment.filePath, body: comment.message, side: "RIGHT" });
+                } else {
+                    await this.leaveIssueComment(comment.message);
+                }
+            }
+        }
+
+        // Submit the final review
+        const reviewEvent = response.approved ? 'APPROVE' : 'COMMENT';
+        await this.submitReview(reviewEvent, response.baseMessage, reviewComments);
+
+        Logger.info('Provider post-processing complete. Review has been submitted.');
+    }
+
+    /**
+     * Adds a specified user as a reviewer on the pull request.
+     * @param {string} botUsername The GitHub username of the bot to add.
+     */
+    async addBotAsReviewer(botUsername) {
+        const owner = this.raw.body.repository.owner.login;
+        const repo = this.raw.body.repository.name;
+        const pullNumber = this.raw.body.pull_request.number;
+
+        const url = `https://api.github.com/repos/${owner}/${repo}/pulls/${pullNumber}/reviewers`;
+        const payload = {
+            reviewers: [botUsername],
+        };
+
+        try {
+            Logger.info(`Provider adding '${botUsername}' as a reviewer...`);
+            await this.http.post(url, payload);
+            Logger.info(`Provider successfully added '${botUsername}' as a reviewer.`);
+        } catch (error) {
+            Logger.error(`Provider could not add bot as reviewer: ${error.message}`);
         }
     }
 }

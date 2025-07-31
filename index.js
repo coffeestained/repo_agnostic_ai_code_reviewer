@@ -22,8 +22,8 @@ app.post('/webhooks', async (req, res) => {
         if (actionMapped) {
             const provider = coreService.parseProviderFromRequest(req, actionMapped);
             if (!provider) throw "Bad Request";
-            Logger.info(`${provider.constructor.name} provider activated. action: ${actionMapped}`);
-            Logger.debug(`${provider.constructor.name} provider activated`, JSON.stringify(req.body.pull_request, null, 2));
+            Logger.info(`Provider ${provider.constructor.name} activated. action: ${actionMapped}`);
+            Logger.debug(`Provider ${provider.constructor.name} activated`, JSON.stringify(req.body.pull_request, null, 2));
         }
         res.status(200).send('Webhook request processed');
     } catch (e) {
