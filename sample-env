@@ -3,12 +3,11 @@ PORT=8080
 LOG_LEVEL=debug
 
 # GitHub
+GITHUB_AGENT_USER=coffeestained
 GITHUB_TOKEN=ghp_...
-GITHUB_OWNER=your-org
 
 # GitLab
 GITLAB_TOKEN=glpat-...
-GITLAB_OWNER=your-group
 
 # Bitbucket (Handler not tested at this time)
 BITBUCKET_USERNAME=your-user
@@ -19,36 +18,68 @@ BITBUCKET_WORKSPACE=your-workspace
 GEMINI_API_KEY=...
 GEMINI_MODEL=gemini-1.5-flash
 
-# Instruction(s)
+# Instructions
 BASE_INSTRUCTIONS="
-You should be ensuring the quality of the code satisfies the following:
+Ensure code quality by checking:
 
-1. Summarize the changes made in a clear bullet-point list.
-
-2. Is the new or modified code easy to understand and well-structured?
-
-3. Does it use meaningful names and comments to explain logic and intent?
-
-4. Identify any bugs, referencing specific lines if possible.
-
-5. Are there any areas where the code could be simplified without changing behavior? Provide examples.
-
-6. Are there any potential security concerns in the code?
-
-7. The MR description always needs a ticket linked to it from any work tracking / ticket or project management tool such as JIRA.
+1. Summarize changes in clear bullet points.  
+2. Is the code readable and well-structured?  
+3. Are names and comments meaningful?  
+4. Flag bugs, reference lines if possible.  
+5. Suggest simplifications without changing behavior.  
+6. Identify security risks.  
+7. PR description must link to a ticket (e.g. JIRA).  
+8. Check indentation follows language norms.  
+9. Only review changed code — avoid scope creep.  
+10. Ignore EOF newlines.  
+11. Keep answers concise.  
+12. No Markdown or code blocks. Return minified JSON string only. 
+13. Dont confirm or dispute other reviewers comments.
+14. All 'message' and 'baseMessage' strings must be ≤150 characters.
 "
 
-REVIEW_INSTRUCTIONS="
-This is a newly opened pull-request.
-Review this code diff using your base instructions.
-Return your response as a basic a string using markdown.
+REVIEW_INSTRUCTIONS = "
+You will be provided a parsed Git diff in structured JSON format.
+
+Each entry contains:
+- filePath: the file path being modified
+- changes: an array of code line changes in that file
+
+Each change includes:
+- line: the actual line number in the original (LEFT) or modified (RIGHT) file
+- side: "LEFT" if the line was deleted, "RIGHT" if it was added
+- type: one of "add", "del"
+- content: the actual line of source code, with leading "+" or "-" already removed
+
+Your task:
+1. Analyze the *semantic meaning* of additions and deletions — not just syntax.
+2. Point out potential bugs, missing logic, confusing patterns, or poor naming.
+3. Suggest improvements, simplifications, or clarifications if needed.
+4. Ignore unchanged lines and only comment on changes (additions or deletions).
+5. Avoid false positives. Assume template literals use backticks and can span multiple lines.
+
+When referencing a change:
+- Use the provided `line` number and `side` exactly as given.
+- Attach all review comments to the most relevant *added* line when possible (side: "RIGHT").
+
+Respond in the following strict JSON structure:
+
+{
+  baseMessage: string,        // a one-sentence summary of overall review
+  approved: boolean,          // true if the diff is acceptable, false otherwise
+  comments?: [                // optional code-specific comments
+    {
+      line: number,           // exact line number from the structured diff
+      side: "LEFT" | "RIGHT", // where the line exists (pre- or post-change)
+      filePath: string,       // exact file path as provided
+      message: string         // a concise, actionable comment
+    }
+  ]
+}
 "
 
 COMMENT_INSTRUCTIONS="
-This is a comment to one of your review comments.
-Be reasonable and determine your next course of action.
-If you are leaving a response:
-Return your response in the following format { message: String }. The message should be a string using markdown.
-If you are approving:
-Return your response in the following format { message?: String, approve: true }. The message is optional can be be a string using markdown.
+You are responding to a response directly to you in a comment thread.  
+Respond with:  
+{ baseMessage: string, comments?: { parentCommentId: num, message: string, resolveReviewThread: bool }[], approved: bool }  
 "

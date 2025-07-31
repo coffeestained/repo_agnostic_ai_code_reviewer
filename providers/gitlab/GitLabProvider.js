@@ -1,10 +1,13 @@
 import { HttpProvider } from '../http/HttpProvider.js';
 
 export class GitLabProvider {
-    constructor() {
+    constructor(req, action) {
         this.http = new HttpProvider({
             Authorization: `Bearer ${process.env.GITLAB_TOKEN}`,
         });
+
+        this.action = action;
+        this._processRequest(req);
     }
 
     validateAccess(req) {
