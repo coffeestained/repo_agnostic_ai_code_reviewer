@@ -1,3 +1,5 @@
+import parse from 'parse-diff';
+
 import { HttpProvider } from '../http/HttpProvider.js';
 import { doGeminiResponse } from '../gemini/Gemini.js';
 import { Logger } from '../../lib/logger.js';
@@ -38,7 +40,43 @@ export class GitHubProvider {
             Logger.debug(`Provider processing comments`, JSON.stringify(this.comments, null, 2));
         }
         if (pullDiff) {
-            this.diff = (await this.http.get(this.raw.body.pull_request.url, { Accept: "application/vnd.github.v3.diff" })).data;
+            this.diff = parse((await this.http.get(this.raw.body.pull_request.url, { Accept: "application/vnd.github.v3.diff" })).data).map(file => {
+                const changes = [];
+                for (const chunk of file.chunks) {
+                    let oldLine = chunk.oldStart;
+                    let newLine = chunk.newStart;
+
+                    for (const change of chunk.changes) {
+                        let side, line;
+
+                        if (change.type === 'normal') {
+                            oldLine++;
+                            newLine++;
+                            continue; // skip unchanged lines
+                        }
+
+                        if (change.type === 'add') {
+                            side = 'RIGHT';
+                            line = newLine++;
+                        } else if (change.type === 'del') {
+                            side = 'LEFT';
+                            line = oldLine++;
+                        }
+
+                        changes.push({
+                            side,
+                            line,
+                            type: change.type,
+                            content: change.content,
+                        });
+                    }
+                }
+
+                return {
+                    filePath: file.to.replace(/^b\//, ''),
+                    changes,
+                };
+            });
             Logger.debug(`Provider processing diff`, JSON.stringify(this.diff, null, 2));
         }
         if (pullDescription) {

@@ -17,7 +17,7 @@ export async function doGeminiResponse(diff, description, actionType, commentTre
         ${process.env[allowedGeminiActionsMap[actionType]]} 
 
         Start Diff --
-        ${diff}
+        ${JSON.stringify(diff, null, 2)}
         End Diff -- 
 
         Description: 
