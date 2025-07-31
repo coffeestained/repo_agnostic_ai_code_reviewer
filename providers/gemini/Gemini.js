@@ -16,8 +16,9 @@ export async function doGeminiResponse(diff, description, actionType, commentTre
         Action Instructions: 
         ${process.env[allowedGeminiActionsMap[actionType]]} 
 
-        Diff: 
+        Start Diff --
         ${diff}
+        End Diff -- 
 
         Description: 
         ${description}

@@ -49,7 +49,6 @@ export class GitHubProvider {
         if (!(await this.validateAction())) return;
 
         Logger.info(`Provider action is required. Proceeding to NL generation.`);
-        console.log(this.diff);
 
         const response = await doGeminiResponse(this.diff, this.description, this.action, this.comments);
         Logger.info(`Provider action processed. Proceeding to post-processing.`);
