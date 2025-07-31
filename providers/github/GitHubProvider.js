@@ -49,6 +49,8 @@ export class GitHubProvider {
         if (!(await this.validateAction())) return;
 
         Logger.info(`Provider action is required. Proceeding to NL generation.`);
+        console.log(this.diff);
+
         const response = await doGeminiResponse(this.diff, this.description, this.action, this.comments);
         Logger.info(`Provider action processed. Proceeding to post-processing.`);
         Logger.info(`Provider action processed. Proceeding to post-processing. ${response}`);
@@ -206,9 +208,12 @@ export class GitHubProvider {
     /////////////////////////////////////
     // POST PROCESSING SECTION ----------
 
-    /**
-     * Posts a general comment on the pull request (not tied to a line of code).
-     */
+    async leaveReviewComment(payload) {
+        const url = `${this.pullRequestUrl}/comments`;
+        Logger.info(`Provider posting PENDING review comment to ${payload.path}`);
+        await this.http.post(url, payload);
+    }
+
     async leaveIssueComment(body) {
         const url = `${this.raw.body.pull_request.issue_url}/comments`;
         const payload = { body };
@@ -216,52 +221,57 @@ export class GitHubProvider {
         await this.http.post(url, payload);
     }
 
-    /**
-     * Submits the final pull request review, publishing all pending comments.
-     * @param {string} event - The review action: 'APPROVE', 'COMMENT', or 'REQUEST_CHANGES'.
-     * @param {string} message - The main body message for the review summary.
-     */
-    async submitReview(event, message, comments) {
+    async submitReview(event, message) {
         const url = `${this.pullRequestUrl}/reviews`;
         const payload = {
             commit_id: this.raw.body.pull_request.head.sha,
             body: message,
             event: event,
-            comments
         };
-        Logger.info(`Provider posting final review with status: ${event}`);
-        await this.http.post(url, payload);
+
+        Logger.info(`Provider submitting final review with status: ${event}`);
+        try {
+            await this.http.post(url, payload);
+        } catch (e) {
+            console.log(e);
+        }
     }
 
-    /**
-     * Processes the AI response to post comments sequentially and finalize the review.
-     * @param {object} response The response object from the Gemini AI.
-     */
     async doPostProcessingActions(response) {
         Logger.info(`Provider starting post-processing for AI response.`);
-        const reviewComments = [];
 
         if (Array.isArray(response.comments)) {
             for (const comment of response.comments) {
-                if (comment.path && comment.line) {
-                    reviewComments.push({ ...comment, path: comment.filePath, body: comment.message, side: "RIGHT" });
+                if (comment.filePath && comment.line) {
+                    try {
+                        await this.leaveReviewComment({
+                            path: comment.filePath,
+                            line: comment.line,
+                            body: comment.message,
+                            commit_id: this.raw.body.pull_request.head.sha,
+                            side: comment.side
+                        });
+                    } catch (e) { console.log(e) }
+                    console.log({
+                        path: comment.filePath,
+                        line: comment.line,
+                        body: comment.message,
+                        commit_id: this.raw.body.pull_request.head.sha,
+                        side: comment.side
+                    })
+
                 } else {
                     await this.leaveIssueComment(comment.message);
                 }
             }
         }
 
-        // Submit the final review
         const reviewEvent = response.approved ? 'APPROVE' : 'COMMENT';
-        await this.submitReview(reviewEvent, response.baseMessage, reviewComments);
+        await this.submitReview(reviewEvent, response.baseMessage);
 
         Logger.info('Provider post-processing complete. Review has been submitted.');
     }
 
-    /**
-     * Adds a specified user as a reviewer on the pull request.
-     * @param {string} botUsername The GitHub username of the bot to add.
-     */
     async addBotAsReviewer(botUsername) {
         const owner = this.raw.body.repository.owner.login;
         const repo = this.raw.body.repository.name;

@@ -18,46 +18,34 @@ BITBUCKET_WORKSPACE=your-workspace
 GEMINI_API_KEY=...
 GEMINI_MODEL=gemini-1.5-flash
 
+# Instructions
 BASE_INSTRUCTIONS="
-You should be ensuring the quality of the code satisfies the following:
+Ensure code quality by checking:
 
-1. Summarize the changes made in a clear bullet-point list.
-
-2. Is the new or modified code easy to understand and well-structured?
-
-3. Does it use meaningful names and comments to explain logic and intent?
-
-4. Identify any bugs, referencing specific lines if possible.
-
-5. Are there any areas where the code could be simplified without changing behavior? Provide examples.
-
-6. Are there any potential security concerns in the code?
-
-7. The MR description always needs a ticket linked to it from any work tracking / ticket or project management tool such as JIRA.
-
-8. Is indentation consistent and following standard for the language detected?
-
-9. It is critical that you only focus on changed code as to not find ourselves in a rabbit hole of changes.
-
-10. Items that can be ignored are as follows: newLine at the end of each file, 
-
-11. Keep your answers short. There is no need to be overly verbose.
+1. Summarize changes in clear bullet points.  
+2. Is the code readable and well-structured?  
+3. Are names and comments meaningful?  
+4. Flag bugs, reference lines if possible.  
+5. Suggest simplifications without changing behavior.  
+6. Identify security risks.  
+7. PR description must link to a ticket (e.g. JIRA).  
+8. Check indentation follows language norms.  
+9. Only review changed code — avoid scope creep.  
+10. Ignore EOF newlines.  
+11. Keep answers concise.  
+12. No Markdown or code blocks. Return minified JSON string only. 
+13. Dont confirm or dispute other reviewers comments.
+14. All 'message' and 'baseMessage' strings must be ≤150 characters.
 "
 
 REVIEW_INSTRUCTIONS="
-This is a newly opened pull-request.
-Review this code diff using your base instructions.
-Your response should always be structed in the following format and the application will structure it as JSON.
-Return your response in the following format: { comments: {line?: num, message: string, filePath: string}[], approved: bool } }. 
-Take note that there may be no comments and a simple approval. Also if you OMIT the line property -- it will be posted as a normal PR comment instead of a code review comment.
-The response should be a JSON string typed in above line. 
+For a new pull request, review the diff using base rules.  
+Respond with:  
+{ baseMessage: string, comments?: { line?: num, message: string, filePath: string }[], approved: bool }   
 "
 
 COMMENT_INSTRUCTIONS="
-This is a comment to one of your review comments.
-Be reasonable and determine your next course of action.
-Your response should always be structed in the following format and the application will structure it as JSON.
-Return your response in the following format { comments: { parentCommentId: num, message: string, resolveReviewThread: bool }[], approved: bool } }. The message/comments is optional.
-Take note that there may be no comments and a simple approval. Also if you OMIT the line property -- it will be posted as a normal PR comment instead of a code review comment.
-The response should be a JSON string typed in above line.
+You are responding to a response directly to you in a comment thread.  
+Respond with:  
+{ baseMessage: string, comments?: { parentCommentId: num, message: string, resolveReviewThread: bool }[], approved: bool }  
 "
