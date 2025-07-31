@@ -38,10 +38,44 @@ Ensure code quality by checking:
 14. All 'message' and 'baseMessage' strings must be ≤150 characters.
 "
 
-REVIEW_INSTRUCTIONS="
-For a new pull request, review the diff using base rules.  
-Respond with:  
-{ baseMessage: string, comments?: { line?: num, message: string, filePath: string }[], approved: bool }   
+REVIEW_INSTRUCTIONS = "
+You will be provided a parsed Git diff in structured JSON format.
+
+Each entry contains:
+- filePath: the file path being modified
+- changes: an array of code line changes in that file
+
+Each change includes:
+- line: the actual line number in the original (LEFT) or modified (RIGHT) file
+- side: "LEFT" if the line was deleted, "RIGHT" if it was added
+- type: one of "add", "del"
+- content: the actual line of source code, with leading "+" or "-" already removed
+
+Your task:
+1. Analyze the *semantic meaning* of additions and deletions — not just syntax.
+2. Point out potential bugs, missing logic, confusing patterns, or poor naming.
+3. Suggest improvements, simplifications, or clarifications if needed.
+4. Ignore unchanged lines and only comment on changes (additions or deletions).
+5. Avoid false positives. Assume template literals use backticks and can span multiple lines.
+
+When referencing a change:
+- Use the provided `line` number and `side` exactly as given.
+- Attach all review comments to the most relevant *added* line when possible (side: "RIGHT").
+
+Respond in the following strict JSON structure:
+
+{
+  baseMessage: string,        // a one-sentence summary of overall review
+  approved: boolean,          // true if the diff is acceptable, false otherwise
+  comments?: [                // optional code-specific comments
+    {
+      line: number,           // exact line number from the structured diff
+      side: "LEFT" | "RIGHT", // where the line exists (pre- or post-change)
+      filePath: string,       // exact file path as provided
+      message: string         // a concise, actionable comment
+    }
+  ]
+}
 "
 
 COMMENT_INSTRUCTIONS="
