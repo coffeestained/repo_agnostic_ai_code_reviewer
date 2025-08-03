@@ -4,12 +4,15 @@ import { GoogleGenerativeAI } from '@google/generative-ai';
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
 const allowedGeminiActionsMap = {
     'initial': 'REVIEW_INSTRUCTIONS',
-    'comment': 'COMMENT_INSTRUCTIONS'
+    'update': 'UPDATE_INSTRUCTIONS'
 };
 
-export async function doGeminiResponse(diff, description, actionType, commentTree, asJson = true) {
+export async function doGeminiResponse(diff, description, actionType, commentTree, agentName = 'UNK', asJson = true) {
     if (!allowedGeminiActionsMap.hasOwnProperty(actionType)) throw "Bad action type";
     const prompt = `
+        Agent Name: 
+        ${agentName}
+
         Global Instructions: 
         ${process.env.BASE_INSTRUCTIONS} 
 
@@ -29,6 +32,13 @@ export async function doGeminiResponse(diff, description, actionType, commentTre
     const model = genAI.getGenerativeModel({ model: process.env.GEMINI_MODEL });
     const result = await model.generateContent(prompt);
     const response = result.response.text();
-    return asJson ? JSON.parse(response) : response;
+
+    let formatted = response;
+    try {
+        if (asJson) formatted = JSON.parse(response);
+    } catch {
+        return new Error('Provider experienced parsing issue with message from LLM.');
+    }
+    return formatted;
 }
 
