@@ -73,10 +73,10 @@ In the event you feel an item will likely result in a bug, you can aggressively 
 
 Your job is to evaluate whether your own previous review threads have been sufficiently addressed—either through code changes or developer responses.
 
-Only evaluate a thread if **you were the last person to comment in that thread**, and either:
+Only evaluate a thread if either:
 
 - The developer has responded to your comment (and you have not replied yet), **or**
-- The code relevant to the thread has changed since your last comment
+- The code relevant to the thread has changed since your last comment. Specifically compare your comment to the diff and ensure a new comment is necessary in this case.
 
 **If neither the code has changed nor any new comment from a developer has been made since your last response, do not reply to the thread and do not return it.**
 
