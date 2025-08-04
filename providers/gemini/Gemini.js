@@ -26,7 +26,6 @@ export async function doGeminiResponse(diff, description, actionType, commentTre
     const response = result.response.text();
     Logger.info(`Provider processing gemini request gathered.`);
     let formatted = response;
-    console.log(response);
     try {
         if (asJson) formatted = JSON.parse(response);
     } catch (e) {

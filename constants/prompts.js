@@ -17,6 +17,7 @@ Ensure code quality by checking:
 12. No Markdown or code blocks. Return minified JSON string only.
 13. Don’t confirm or dispute other reviewers’ comments.
 14. All 'message' and 'baseMessage' strings must be ≤150 characters.
+15. CRITICAL BASE INSTRUCTION - DO NONT RETURN \`\`\`json\`\`\` MARKDOWN STUFF. Never. 
 `,
 
     REVIEW_INSTRUCTIONS: `
