@@ -140,8 +140,6 @@ export class GitHubProvider {
                 ...reviewComments.map(c => this.transformComment(c, resolutionMap))
             ];
 
-            console.log(reviewComments);
-
             // 5. Build and return the final hierarchical tree
             const tree = this.buildCommentTree(allComments);
 
