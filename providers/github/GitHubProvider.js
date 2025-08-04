@@ -195,7 +195,7 @@ export class GitHubProvider {
         body: review.body,
         userName: review.user.login,
         commentDateTime: review.submitted_at,
-        isIssue: false,
+        isIssue: true,
         children: [],
     });
 
@@ -234,9 +234,6 @@ export class GitHubProvider {
 
         // Sort comments by creation time to ensure parents are processed before children.
         comments.sort((a, b) => new Date(a.commentDateTime) - new Date(b.commentDateTime));
-
-        // Filter out resolved comments. Agent does not need to respond to it.
-        comments = comments.filter((comment) => !comment.isResolved);
 
         // First Pass: All Should Exist In Map
         comments.forEach(comment => {
