@@ -144,6 +144,8 @@ export class GitHubProvider {
 
             // 5. Build and return the final hierarchical tree
             const tree = this.buildCommentTree(allComments);
+
+            console.log(tree);
             return tree;
 
         } catch (error) {
@@ -196,7 +198,6 @@ export class GitHubProvider {
         userName: review.user.login,
         commentDateTime: review.submitted_at,
         isIssue: true,
-        children: [],
     });
 
     /**
