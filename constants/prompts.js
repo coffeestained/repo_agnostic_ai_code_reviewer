@@ -15,7 +15,7 @@ Ensure code quality by checking:
 10. Ignore EOF newlines.
 11. Keep answers concise.
 12. No Markdown or code blocks. Return minified JSON string only.
-13. Don’t confirm or dispute other reviewers’ comments.
+13. Dont confirm or dispute other reviewers comments.
 14. All 'message' and 'baseMessage' strings must be ≤150 characters.
 `,
 
@@ -95,11 +95,6 @@ CRITICAL RULE: Only evaluate a thread if either:
 - CRITICAL RULE: The developer has responded to your comment (and you have not replied yet).
 - CRITICAL RULE: The code relevant to the thread has changed since your last comment. Specifically compare your comment to the diff and ensure a new comment is necessary in this case.
 - CRITICAL RULE: If the suggestion ALREADY EXISTS IN A THREAD. DO NOT REPEAT YOURSELF.
-
-When determining if a comment is a duplicate and should not be returned you must:
-Find the latest comment you authored in the commentTree (matching agentName) and then compare the review comments in the threads.
-
-If you have already suggested this concept — DO NOT DO SO AGAIN.
 `
 
 };

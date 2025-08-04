@@ -10,7 +10,6 @@ export class GitHubProvider {
     action;
     raw;
     repoUrl;
-    pullRequestId;
     pullRequestUrl;
     latestCommitHash;
 
@@ -134,12 +133,13 @@ export class GitHubProvider {
                 .filter(review => review.body);
 
             // 4. Combine and transform all comments into a unified format
+            console.log(reviewComments);
             const allComments = [
-                ...reviewBodyComments.map(c => this.transformReviewToComment(c, pullRequestId)),
-                ...issueComments.map(c => this.transformComment(c, pullRequestId)),
-                ...reviewComments.map(c => this.transformComment(c, pullRequestId))
+                ...reviewBodyComments.map(c => this.transformReviewToComment(c)),
+                ...issueComments.map(c => this.transformComment(c)),
+                ...reviewComments.map(c => this.transformComment(c))
             ];
-
+            return;
             // 5. Build and return the final hierarchical tree
             const tree = this.buildCommentTree(allComments);
             return tree;
@@ -153,14 +153,11 @@ export class GitHubProvider {
      * Transforms a GitHub API review summary object into our desired comment format.
      * These are the top-level review comments (e.g., "Review Parent").
      */
-    transformReviewToComment = (review, pullRequestId) => ({
+    transformReviewToComment = (review) => ({
         id: review.id,
-        pullRequestId,
         body: review.body,
         userName: review.user.login,
         commentDateTime: review.submitted_at,
-        initialCommit: review.original_commit_id,
-        currentCommit: review.commit_id,
         parentId: null,
         isResolved: false,
         children: [],
@@ -169,14 +166,11 @@ export class GitHubProvider {
     /**
      * Transforms a GitHub API issue or line-specific review comment object.
      */
-    transformComment = (comment, pullRequestId) => ({
+    transformComment = (comment) => ({
         id: comment.id,
-        pullRequestId,
         body: comment.body,
         userName: comment.user.login,
         commentDateTime: comment.created_at,
-        initialCommit: comment.original_commit_id,
-        currentCommit: comment.commit_id,
         parentId: comment.in_reply_to_id || comment.pull_request_review_id || null,
         isResolved: comment.state === 'resolved',
         children: [],
