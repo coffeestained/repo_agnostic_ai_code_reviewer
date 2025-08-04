@@ -94,7 +94,7 @@ export class GitHubProvider {
 
         Logger.info(`Provider action is required for ${this.pullRequestId}. Proceeding to NL generation.`);
 
-        const response = await doGeminiResponse(this.diff, this.description, this.action, this.comments);
+        const response = await doGeminiResponse(this.diff, this.description, this.action, this.comments, process.env.GITHUB_AGENT_USER);
         Logger.info(`Provider action processed. Proceeding to post-processing.`);
         Logger.debug(`Provider action processed. Proceeding to post-processing. ${JSON.stringify(response, null, 2)}`);
 
