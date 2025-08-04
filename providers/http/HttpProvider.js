@@ -14,7 +14,6 @@ export class HttpProvider {
     }
 
     async post(url, data = {}, headers = {}) {
-        console.log(url, data, headers)
         return axios.post(url, data, { headers: { ...this.authHeaders, ...headers } }).catch(err => { Logger.error(err); throw err; });
     }
 

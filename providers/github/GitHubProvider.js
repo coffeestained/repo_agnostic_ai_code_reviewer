@@ -115,10 +115,9 @@ export class GitHubProvider {
         const pr = webhookBody.pull_request;
 
         // 1. Extract necessary info from the payload
-        const urlParts = new URL(pr.url).pathname.split('/');
-        const owner = urlParts[2];
-        const repo = urlParts[3];
-        const pullRequestId = parseInt(urlParts[5], 10);
+        const owner = pr.base.repo.owner.login;
+        const repo = pr.base.repo.name;
+        const pullRequestId = pr.number;
         const issueCommentsUrl = pr.comments_url;
         const reviewCommentsUrl = pr.review_comments_url;
         const reviewsUrl = `${pr.url}/reviews`;
@@ -126,7 +125,7 @@ export class GitHubProvider {
         try {
             // 2. Make parallel API calls to fetch all three content types.
             const [resolutionMap, issueComments, reviewComments, reviews] = (await Promise.all([
-                this.fetchThreadResolutions(owner, repo, parseInt(pullRequestId)),
+                this.fetchThreadResolutions(owner, repo, pullRequestId),
                 this.http.get(issueCommentsUrl, {}),
                 this.http.get(reviewCommentsUrl, {}),
                 this.http.get(reviewsUrl, {})
@@ -142,7 +141,7 @@ export class GitHubProvider {
                 ...issueComments.map(c => this.transformComment(c)),
                 ...reviewComments.map(c => this.transformComment(c, resolutionMap))
             ];
-
+            console.log(resolutionMap);
             // 5. Build and return the final hierarchical tree
             const tree = this.buildCommentTree(allComments);
             return tree;
