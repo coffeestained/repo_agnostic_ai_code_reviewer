@@ -124,9 +124,8 @@ export class GitHubProvider {
 
         try {
             // 2. Make parallel API calls to fetch all three content types.
-            const [resolutionMap, issueComments, reviewComments, reviews] = (await Promise.all([
+            const [resolutionMap, reviewComments, reviews] = (await Promise.all([
                 this.fetchThreadResolutions(owner, repo, pullRequestId),
-                this.http.get(issueCommentsUrl, {}),
                 this.http.get(reviewCommentsUrl, {}),
                 this.http.get(reviewsUrl, {})
             ])).map((response) => response.data);
@@ -138,14 +137,14 @@ export class GitHubProvider {
             // 4. Combine and transform all comments into a unified format
             const allComments = [
                 ...reviewBodyComments.map(c => this.transformReviewToComment(c)),
-                ...issueComments.map(c => this.transformIssue(c)),
                 ...reviewComments.map(c => this.transformComment(c, resolutionMap))
             ];
+
+            console.log(reviewComments);
 
             // 5. Build and return the final hierarchical tree
             const tree = this.buildCommentTree(allComments);
 
-            console.log(tree);
             return tree;
 
         } catch (error) {
