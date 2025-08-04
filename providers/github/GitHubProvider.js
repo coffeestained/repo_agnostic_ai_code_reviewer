@@ -141,7 +141,7 @@ export class GitHubProvider {
                 ...issueComments.map(c => this.transformComment(c)),
                 ...reviewComments.map(c => this.transformComment(c, resolutionMap))
             ];
-            console.log(resolutionMap);
+
             // 5. Build and return the final hierarchical tree
             const tree = this.buildCommentTree(allComments);
             return tree;
@@ -224,12 +224,14 @@ export class GitHubProvider {
 
         // First Pass: All Should Exist In Map
         comments.forEach(comment => {
-            commentMap[comment.id] = comment;
+            if (!comment.isResolved) {
+                commentMap[comment.id] = comment;
+            }
         });
 
         // Map Comments To Correct Location In Tree
         comments.forEach(comment => {
-            if (comment.parentId && commentMap[comment.parentId]) {
+            if (!comment.isResolved && comment.parentId && commentMap[comment.parentId]) {
                 commentMap[comment.parentId].children.push(comment);
                 delete commentMap[comment.id];
             }
@@ -237,6 +239,8 @@ export class GitHubProvider {
 
         // Convert to Array
         Object.values(commentMap).forEach((value) => tree.push(value));
+
+        console.log(tree);
 
         return tree;
     }
