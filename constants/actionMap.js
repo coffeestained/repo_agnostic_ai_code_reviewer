@@ -16,6 +16,9 @@ export const actionMap = {
     'ready_for_review': (req) => {
         return 'initial';
     },
+    'review_requested': (req) => {
+        return 'initial';
+    },
     'synchronize': (req) => {
         return 'update';
     },

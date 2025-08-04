@@ -29,6 +29,7 @@ app.post('/webhooks', async (req, res) => {
         }
         res.status(200).send('Webhook request processed');
     } catch (e) {
+        Logger.error(`Provider experienced an uncaught error during processing ${e}`);
         res.status(500).send('Webhook request failed');
     }
 });

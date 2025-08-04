@@ -219,11 +219,7 @@ export class GitHubProvider {
      */
     async validateAction() {
         if (this.action === 'initial') {
-            const hasAgentDoneInitialReview = this.comments.some((comment) => comment.userName === this._AGENT_USER);
-            if (!hasAgentDoneInitialReview) {
-                Logger.info('Provider should do the initial review');
-                return true;
-            }
+            return true;
         } else if (this.action === 'update') {
             return true;
         }
@@ -376,8 +372,8 @@ export class GitHubProvider {
         Logger.info(`Provider submitting final review with status: ${event}`);
         try {
             await this.http.post(url, payload);
-        } catch (_e) {
-            Logger.error('Provider failed to submit review.')
+        } catch (e) {
+            Logger.error(`Provider failed to submit review ${e}.`)
         }
     }
 
@@ -392,7 +388,7 @@ export class GitHubProvider {
                             await this.leaveReviewComment({
                                 path: comment.filePath,
                                 line: comment.line,
-                                body: `${comment.message} You can discuss alternatives or make a change to trigger a re-review. When all threads are resolved -- the agent will approve.`,
+                                body: `${comment.message} You can discuss the request or make a change to trigger a re-review. When all threads are resolved -- the agent will approve.`,
                                 commit_id: this.raw.body.pull_request.head.sha,
                                 side: comment.side
                             });
@@ -407,9 +403,9 @@ export class GitHubProvider {
             }
         } else if (this.action === 'update') {
             await this.responseToUpdateRequest(response);
-            //resolveThreadFromParentComment
         }
 
+        console.log(response, response.approved, response.baseMessage);
         const reviewEvent = response.approved ? 'APPROVE' : 'COMMENT';
         if (response.baseMessage) {
             await this.submitReview(reviewEvent, response.baseMessage);
