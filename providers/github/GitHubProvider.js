@@ -195,8 +195,7 @@ export class GitHubProvider {
         body: review.body,
         userName: review.user.login,
         commentDateTime: review.submitted_at,
-        parentId: null,
-        isResolved: false,
+        isIssue: false,
         children: [],
     });
 
@@ -218,13 +217,11 @@ export class GitHubProvider {
     /**
      * Transforms a GitHub API issue.
      */
-    transformIssue = (comment, resolutionMap = {}) => ({
+    transformIssue = (comment) => ({
         id: comment.id,
         body: comment.body,
         userName: comment.user.login,
         commentDateTime: comment.created_at,
-        parentId: comment.in_reply_to_id || comment.pull_request_review_id || null,
-        isResolved: resolutionMap[comment.id] ?? false,
         isIssue: true,
     });
 
