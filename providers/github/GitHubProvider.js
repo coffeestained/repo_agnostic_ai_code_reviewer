@@ -138,7 +138,7 @@ export class GitHubProvider {
             // 4. Combine and transform all comments into a unified format
             const allComments = [
                 ...reviewBodyComments.map(c => this.transformReviewToComment(c)),
-                ...issueComments.map(c => this.transformComment(c)),
+                ...issueComments.map(c => this.transformIssue(c)),
                 ...reviewComments.map(c => this.transformComment(c, resolutionMap))
             ];
 
@@ -201,7 +201,7 @@ export class GitHubProvider {
     });
 
     /**
-     * Transforms a GitHub API issue or line-specific review comment object.
+     * Transforms a GitHub API line-specific review comment object.
      */
     transformComment = (comment, resolutionMap = {}) => ({
         id: comment.id,
@@ -213,6 +213,19 @@ export class GitHubProvider {
         pathOfChange: comment.path,
         lineOfChange: comment.line,
         children: [],
+    });
+
+    /**
+     * Transforms a GitHub API issue.
+     */
+    transformIssue = (comment, resolutionMap = {}) => ({
+        id: comment.id,
+        body: comment.body,
+        userName: comment.user.login,
+        commentDateTime: comment.created_at,
+        parentId: comment.in_reply_to_id || comment.pull_request_review_id || null,
+        isResolved: resolutionMap[comment.id] ?? false,
+        isIssue: true,
     });
 
     /**
@@ -291,6 +304,7 @@ export class GitHubProvider {
 
                 const url = `https://api.github.com/repos/${owner}/${repo}/pulls/${pullNumber}/comments/${commentId}/replies`;
                 Logger.info(`Provider replying to review comment ${url}`);
+                console.log(commentId, message, resolveReviewThread)
                 await this.http.post(url, { body: message });
 
                 if (resolveReviewThread) {
@@ -381,8 +395,6 @@ export class GitHubProvider {
         return result.data.resolveReviewThread.thread;
     }
 
-
-
     async leaveReviewComment(payload) {
         const url = `${this.pullRequestUrl}/comments`;
         Logger.info(`Provider posting PENDING review comment to ${payload.path}`);
@@ -440,6 +452,27 @@ export class GitHubProvider {
             }
         } else if (this.action === 'update') {
             await this.responseToUpdateRequest(response);
+            if (Array.isArray(response.newReviews)) {
+                for (const comment of response.newReviews) {
+                    if (comment.filePath && comment.line) {
+                        try {
+                            await this.leaveReviewComment({
+                                path: comment.filePath,
+                                line: comment.line,
+                                body: `${comment.message} You can discuss the request or make a change to trigger a re-review. When all threads are resolved -- the agent will approve.`,
+                                commit_id: this.raw.body.pull_request.head.sha,
+                                side: comment.side
+                            });
+                        } catch (e) {
+                            Logger.error('Provider failed to submit review comment.');
+                            Logger.debug(`Provider failed to submit review comment details ${e}.`)
+                            throw e;
+                        }
+                    } else {
+                        await this.leaveIssueComment(comment.message);
+                    }
+                }
+            }
         }
 
         const reviewEvent = response.approved ? 'APPROVE' : 'COMMENT';
