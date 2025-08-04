@@ -18,6 +18,7 @@ export class GitHubProvider {
     comments = [];
     diff;
 
+
     constructor(req, action) {
         this.http = new HttpProvider({
             Authorization: `Bearer ${process.env.GITHUB_TOKEN}`,
