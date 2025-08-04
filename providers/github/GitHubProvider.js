@@ -3,6 +3,7 @@ import parse from 'parse-diff';
 import { HttpProvider } from '../http/HttpProvider.js';
 import { doGeminiResponse } from '../gemini/Gemini.js';
 import { Logger } from '../../lib/logger.js';
+import e from 'express';
 
 export class GitHubProvider {
     _AGENT_USER = process.env.GITHUB_AGENT_USER;
@@ -366,7 +367,8 @@ export class GitHubProvider {
         try {
             await this.http.post(url, payload);
         } catch (e) {
-            Logger.error(`Provider failed to submit review ${e}.`)
+            Logger.error(`Provider failed to submit review ${e}.`);
+            throw e;
         }
     }
 
@@ -388,6 +390,7 @@ export class GitHubProvider {
                         } catch (e) {
                             Logger.error('Provider failed to submit review comment.');
                             Logger.debug(`Provider failed to submit review comment details ${e}.`)
+                            throw e;
                         }
                     } else {
                         await this.leaveIssueComment(comment.message);
@@ -422,6 +425,7 @@ export class GitHubProvider {
             Logger.info(`Provider successfully added '${botUsername}' as a reviewer.`);
         } catch (error) {
             Logger.error(`Provider could not add bot as reviewer: ${error.message}`);
+            throw error;
         }
     }
 }
