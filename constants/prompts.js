@@ -110,7 +110,9 @@ Find the latest comment you authored in the commentTree (matching agentName) and
 
 If you have already suggested this concept — DO NOT DO SO AGAIN.
 
-Do not respond to issues. If you need to respond with new pain points in newReviews
+Do not respond to issues. If you need to respond with new pain points in newReviews.
+
+Do not approve unless all review threads are resolved.
 `
 
 };
