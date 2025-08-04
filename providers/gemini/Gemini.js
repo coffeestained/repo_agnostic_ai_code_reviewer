@@ -1,6 +1,7 @@
 import 'dotenv/config';
 import { GoogleGenerativeAI } from '@google/generative-ai';
 import { Logger } from '../../lib/logger.js';
+import { prompts } from '../../constants/prompts.js';
 
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
 const allowedGeminiActionsMap = {
@@ -13,7 +14,7 @@ export async function doGeminiResponse(diff, description, actionType, commentTre
     const prompt = {
         agentName,
         globalInstructions: process.env.BASE_INSTRUCTIONS,
-        actionInstructions: process.env[allowedGeminiActionsMap[actionType]],
+        actionInstructions: prompts[allowedGeminiActionsMap[actionType]],
         diff,
         description,
         commentTree
