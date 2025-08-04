@@ -241,8 +241,6 @@ export class GitHubProvider {
         // Convert to Array
         Object.values(commentMap).forEach((value) => tree.push(value));
 
-        console.log(tree);
-
         return tree;
     }
 
