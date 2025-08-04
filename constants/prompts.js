@@ -1,6 +1,6 @@
 export const prompts = {
 
-    BASE_INSTRUCTIONS: `
+  BASE_INSTRUCTIONS: `
 Ensure code quality by checking:
 
 1. Summarize changes in clear bullet points.
@@ -20,7 +20,7 @@ Ensure code quality by checking:
 15. CRITICAL BASE INSTRUCTION - DO NONT RETURN \`\`\`json\`\`\` MARKDOWN STUFF. Never. 
 `,
 
-    REVIEW_INSTRUCTIONS: `
+  REVIEW_INSTRUCTIONS: `
 Ensure the global instructions are heeded.
 For this review, you will be provided a parsed Git diff in a structured JSON format.
 
@@ -66,7 +66,7 @@ CRITICAL RULE: Only evaluate a diff if:
 - CRITICAL RULE: If the suggestion ALREADY EXISTS IN A THREAD. DO NOT REPEAT YOURSELF.
 `,
 
-    UPDATE_INSTRUCTIONS: `
+  UPDATE_INSTRUCTIONS: `
 You are reviewing a pull request that contains both code changes (diff) and threaded comments (a full review comment tree).
 
 In the event you feel an item will likely result in a bug, you can aggressively defend your point.
@@ -88,6 +88,14 @@ Return a JSON object in the following format (JSON, minified, no markdown):
       'resolveReviewThread': true | false
     }
   ],
+  'newReviews': [                // optional code-specific comments
+    {
+      line: number,           // exact line number from the structured diff
+      side: 'LEFT' | 'RIGHT', // where the line exists (pre- or post-change)
+      filePath: string,       // exact file path as provided
+      message: string         // a concise, actionable comment
+    }
+  ],
   'approved': true | false
 }
 
@@ -101,6 +109,10 @@ When determining if a comment is a duplicate and should not be returned you must
 Find the latest comment you authored in the commentTree (matching agentName) and then compare the review comments in the threads.
 
 If you have already suggested this concept — DO NOT DO SO AGAIN.
+
+Do not respond to issues. If you need to respond with new pain points in newReviews.
+
+Do not approve unless all review threads are resolved.
 `
 
 };
