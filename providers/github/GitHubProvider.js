@@ -210,7 +210,7 @@ export class GitHubProvider {
         parentId: comment.in_reply_to_id || comment.pull_request_review_id || null,
         isResolved: resolutionMap[comment.id] ?? false,
         pathOfChange: comment.path,
-        lineOfChange: comment.line,
+        lineOfChange: comment.original_line,
         children: [],
     });
 
