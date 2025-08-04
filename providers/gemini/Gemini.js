@@ -37,7 +37,7 @@ export async function doGeminiResponse(diff, description, actionType, commentTre
     try {
         if (asJson) formatted = JSON.parse(response);
     } catch {
-        return new Error('Provider experienced parsing issue with message from LLM.');
+        throw new Error('Provider experienced parsing issue with message from LLM.');
     }
     return formatted;
 }
