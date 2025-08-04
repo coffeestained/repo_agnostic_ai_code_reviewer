@@ -397,7 +397,6 @@ export class GitHubProvider {
                                 side: comment.side
                             });
                         } catch (e) {
-                            console.log(e);
                             Logger.error('Provider failed to submit review comment.')
                         }
                     } else {
