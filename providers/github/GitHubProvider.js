@@ -405,7 +405,6 @@ export class GitHubProvider {
             await this.responseToUpdateRequest(response);
         }
 
-        console.log(response, response.approved, response.baseMessage);
         const reviewEvent = response.approved ? 'APPROVE' : 'COMMENT';
         if (response.baseMessage) {
             await this.submitReview(reviewEvent, response.baseMessage);
