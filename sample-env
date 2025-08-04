@@ -7,24 +7,6 @@ GEMINI_API_KEY=<>
 GITHUB_AGENT_USER=tilliestudios
 GITHUB_TOKEN=<>
 
-BASE_INSTRUCTIONS="
-Ensure code quality by checking:
-
-1. Summarize changes in clear bullet points.  
-2. Is the code readable and well-structured?  
-3. Are names and comments meaningful?  
-4. Flag bugs, reference lines if possible.  
-5. Suggest simplifications without changing behavior.  
-6. Identify security risks.  
-7. Every PR description must directly link a JIRA or like product management ticket URL.
-8. Check indentation follows language norms.  
-9. Only review changed code — avoid scope creep.  
-10. Ignore EOF newlines.  
-11. Keep answers concise.  
-12. No Markdown or code blocks. Return minified JSON string only. 
-13. Dont confirm or dispute other reviewers comments.
-14. All 'message' and 'baseMessage' strings must be ≤150 characters.
-"
 REVIEW_INSTRUCTIONS="
 Ensure the global instructions are heeded.
 For this review, you will be provided a parsed Git diff in a structured JSON format. 
@@ -64,6 +46,11 @@ Respond in the following strict JSON structure:
     }
   ]
 }
+
+CRITICAL RULE: Only evaluate a diff if:
+
+- CRITICAL RULE: The code relevant to the thread has changed since your last comment. Specifically compare your comment to the diff and ensure a new comment is necessary in this case.
+- CRITICAL RULE: If the suggestion ALREADY EXISTS IN A THREAD. DO NOT REPEAT YOURSELF.
 "
 
 UPDATE_INSTRUCTIONS="
@@ -94,6 +81,7 @@ Return a JSON object in the following format (JSON, minified, no markdown):
 
 CRITICAL RULE: Only evaluate a thread if either:
 
-- CRITICAL RULE: The developer has responded to your comment (and you have not replied yet), **or**
+- CRITICAL RULE: The developer has responded to your comment (and you have not replied yet).
 - CRITICAL RULE: The code relevant to the thread has changed since your last comment. Specifically compare your comment to the diff and ensure a new comment is necessary in this case.
+- CRITICAL RULE: If the suggestion ALREADY EXISTS IN A THREAD. DO NOT REPEAT YOURSELF.
 "
