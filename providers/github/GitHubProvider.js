@@ -413,7 +413,7 @@ export class GitHubProvider {
         const repo = this.raw.body.repository.name;
         const pullNumber = this.raw.body.pull_request.number;
 
-        const url = `https://api.github.com/repos/${owner}/${repo}/pulls/${pullNumber}/reviewers`;
+        const url = `https://api.github.com/repos/${owner}/${repo}/pulls/${pullNumber}/requested_reviewers`;
         const payload = {
             reviewers: [botUsername],
         };
