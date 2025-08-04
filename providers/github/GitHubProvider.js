@@ -30,8 +30,6 @@ export class GitHubProvider {
         this.pullRequestUrl = req.body.pull_request.url;
         this.pullRequestId = req.body.pull_request.id;
         this.latestCommitHash = req.body.after;
-
-        this.processRequest(req).catch(err => { Logger.debug(err); throw err; });
     }
 
     async processRequest() {
