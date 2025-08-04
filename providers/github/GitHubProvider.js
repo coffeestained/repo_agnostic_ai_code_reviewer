@@ -161,7 +161,8 @@ export class GitHubProvider {
                     isResolved
                     comments(first: 100) {
                         nodes {
-                            id
+                            id,
+                            databaseId
                         }
                     }
                 }
@@ -178,7 +179,7 @@ export class GitHubProvider {
         const resolutionMap = {};
         threads.forEach(thread => {
             thread.comments.nodes.forEach(comment => {
-                resolutionMap[comment.id] = thread.isResolved;
+                resolutionMap[comment.databaseId] = thread.isResolved;
             });
         });
 
