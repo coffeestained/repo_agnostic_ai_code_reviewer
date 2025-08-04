@@ -114,14 +114,15 @@ export class GitHubProvider {
         const pr = webhookBody.pull_request;
 
         // 1. Extract necessary info from the payload
-        const pullRequestId = pr.id;
+        const [_, owner, repo, pulls, pullRequestId] = pr.url.split('/');
         const issueCommentsUrl = pr.comments_url;
         const reviewCommentsUrl = pr.review_comments_url;
         const reviewsUrl = `${pr.url}/reviews`;
 
         try {
             // 2. Make parallel API calls to fetch all three content types.
-            const [issueComments, reviewComments, reviews] = (await Promise.all([
+            const [resolutionMap, issueComments, reviewComments, reviews] = (await Promise.all([
+                this.fetchThreadResolutions(owner, repo, parseInt(pullRequestId)),
                 this.http.get(issueCommentsUrl, {}),
                 this.http.get(reviewCommentsUrl, {}),
                 this.http.get(reviewsUrl, {})
@@ -135,7 +136,7 @@ export class GitHubProvider {
             const allComments = [
                 ...reviewBodyComments.map(c => this.transformReviewToComment(c)),
                 ...issueComments.map(c => this.transformComment(c)),
-                ...reviewComments.map(c => this.transformComment(c))
+                ...reviewComments.map(c => this.transformComment(c, resolutionMap))
             ];
 
             // 5. Build and return the final hierarchical tree
@@ -145,6 +146,41 @@ export class GitHubProvider {
         } catch (error) {
             throw error; // Re-throw to be handled by the caller
         }
+    }
+
+    async fetchThreadResolutions(owner, repo, pullNumber) {
+        const query = `
+        query GetReviewThreads($owner: String!, $repo: String!, $pullNumber: Int!) {
+            repository(owner: $owner, name: $repo) {
+            pullRequest(number: $pullNumber) {
+                reviewThreads(first: 100) {
+                nodes {
+                    isResolved
+                    comments(first: 100) {
+                    nodes {
+                        id
+                    }
+                    }
+                }
+                }
+            }
+            }
+        }
+        `;
+
+        const variables = { owner, repo, pullNumber };
+
+        const response = await this.httpGraphQL.post('/graphql', { query, variables });
+        const threads = response.data.data.repository.pullRequest.reviewThreads.nodes;
+
+        const resolutionMap = {};
+        threads.forEach(thread => {
+            thread.comments.nodes.forEach(comment => {
+                resolutionMap[comment.id] = thread.isResolved;
+            });
+        });
+
+        return resolutionMap;
     }
 
     /**
@@ -164,13 +200,13 @@ export class GitHubProvider {
     /**
      * Transforms a GitHub API issue or line-specific review comment object.
      */
-    transformComment = (comment) => ({
+    transformComment = (comment, resolutionMap = {}) => ({
         id: comment.id,
         body: comment.body,
         userName: comment.user.login,
         commentDateTime: comment.created_at,
         parentId: comment.in_reply_to_id || comment.pull_request_review_id || null,
-        isResolved: comment.state === 'resolved',
+        isResolved: resolutionMap[comment.id] ?? false,
         children: [],
     });
 
