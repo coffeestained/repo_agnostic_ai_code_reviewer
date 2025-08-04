@@ -128,6 +128,8 @@ export class GitHubProvider {
                 this.http.get(reviewsUrl, {})
             ])).map((response) => response.data);
 
+            console.log(resolutionMap)
+
             // 3. Transform review summary objects into our standard comment format.
             const reviewBodyComments = reviews
                 .filter(review => review.body);
@@ -180,7 +182,7 @@ export class GitHubProvider {
             });
         });
 
-        return resolutionMap;
+        return { data: resolutionMap };
     }
 
     /**
