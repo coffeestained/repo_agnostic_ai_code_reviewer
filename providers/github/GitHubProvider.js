@@ -241,8 +241,6 @@ export class GitHubProvider {
         // Filter out resolved comments. Agent does not need to respond to it.
         comments = comments.filter((comment) => !comment.isResolved);
 
-        console.log(comments)
-
         // First Pass: All Should Exist In Map
         comments.forEach(comment => {
             commentMap[comment.id] = comment;
