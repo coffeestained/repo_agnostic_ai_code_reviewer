@@ -5,10 +5,14 @@ import { doGeminiResponse } from '../gemini/Gemini.js';
 import { Logger } from '../../lib/logger.js';
 
 export class GitHubProvider {
+    _AGENT_USER = process.env.GITHUB_AGENT_USER;
+
     action;
     raw;
     repoUrl;
+    pullRequestId;
     pullRequestUrl;
+    latestCommitHash;
 
     description;
     comments = [];
@@ -24,8 +28,10 @@ export class GitHubProvider {
         this.action = action;
         this.repoUrl = req.body.repository.url;
         this.pullRequestUrl = req.body.pull_request.url;
+        this.pullRequestId = req.body.pull_request.id;
+        this.latestCommitHash = req.body.after;
 
-        this.processRequest(req);
+        this.processRequest(req).catch((e) => Logger.error(e.message));
     }
 
     async processRequest() {
@@ -33,8 +39,8 @@ export class GitHubProvider {
         Logger.info(`Provider has access to repository`);
 
         const pullDescription = true;
-        const pullComments = ['initial'].includes(this.action);
-        const pullDiff = ['initial'].includes(this.action);
+        const pullComments = ['initial', 'update'].includes(this.action);
+        const pullDiff = ['initial', 'update'].includes(this.action);
         if (pullComments) {
             this.comments = await this.buildCommentTreeFromWebhook(this.raw.body);
             Logger.debug(`Provider processing comments`, JSON.stringify(this.comments, null, 2));
@@ -81,18 +87,19 @@ export class GitHubProvider {
         }
         if (pullDescription) {
             this.description = this.raw.body.pull_request.body;
-            Logger.info(`Provider processing description`, JSON.stringify(this.description, null, 2));
+            Logger.debug(`Provider processing description`, JSON.stringify(this.description, null, 2));
         }
 
         if (!(await this.validateAction())) return;
 
-        Logger.info(`Provider action is required. Proceeding to NL generation.`);
+        Logger.info(`Provider action is required for ${this.pullRequestId}. Proceeding to NL generation.`);
 
         const response = await doGeminiResponse(this.diff, this.description, this.action, this.comments);
         Logger.info(`Provider action processed. Proceeding to post-processing.`);
-        Logger.info(`Provider action processed. Proceeding to post-processing. ${response}`);
+        Logger.debug(`Provider action processed. Proceeding to post-processing. ${JSON.stringify(response, null, 2)}`);
 
-        await this.addBotAsReviewer(process.env.GITHUB_AGENT_USER);
+        if (this.action === 'initial') await this.addBotAsReviewer(this._AGENT_USER);
+
         await this.doPostProcessingActions(response);
     }
 
@@ -107,14 +114,12 @@ export class GitHubProvider {
      */
     async buildCommentTreeFromWebhook(webhookBody) {
         const pr = webhookBody.pull_request;
-        const repo = webhookBody.repository;
-        const prNumber = webhookBody.number;
 
         // 1. Extract necessary info from the payload
         const pullRequestId = pr.id;
         const issueCommentsUrl = pr.comments_url;
         const reviewCommentsUrl = pr.review_comments_url;
-        const reviewsUrl = `https://api.github.com/repos/${repo.full_name}/pulls/${prNumber}/reviews`;
+        const reviewsUrl = `${pr.url}/reviews`;
 
         try {
             // 2. Make parallel API calls to fetch all three content types.
@@ -154,6 +159,8 @@ export class GitHubProvider {
         body: review.body,
         userName: review.user.login,
         commentDateTime: review.submitted_at,
+        initialCommit: review.original_commit_id,
+        currentCommit: review.commit_id,
         parentId: null,
         isResolved: false,
         children: [],
@@ -168,6 +175,8 @@ export class GitHubProvider {
         body: comment.body,
         userName: comment.user.login,
         commentDateTime: comment.created_at,
+        initialCommit: comment.original_commit_id,
+        currentCommit: comment.commit_id,
         parentId: comment.in_reply_to_id || comment.pull_request_review_id || null,
         isResolved: comment.state === 'resolved',
         children: [],
@@ -210,17 +219,13 @@ export class GitHubProvider {
      */
     async validateAction() {
         if (this.action === 'initial') {
-            const hasAgentDoneInitialReview = this.comments.some((comment) => comment.userName === process.env.GITHUB_AGENT_USER);
+            const hasAgentDoneInitialReview = this.comments.some((comment) => comment.userName === this._AGENT_USER);
             if (!hasAgentDoneInitialReview) {
                 Logger.info('Provider should do the initial review');
                 return true;
             }
-        } else if (this.action === 'comment') {
-            const hasCommentChainRequiringResponse = this.comments.some((comment) => comment.userName === process.env.GITHUB_AGENT_USER);
-            if (!hasCommentChainRequiringResponse) {
-                Logger.info('Provider should respond to latest comment or resolve and approve');
-                return true;
-            }
+        } else if (this.action === 'update') {
+            return true;
         }
         Logger.info('Provider has no action required');
         return false;
@@ -244,6 +249,108 @@ export class GitHubProvider {
 
     /////////////////////////////////////
     // POST PROCESSING SECTION ----------
+    async responseToUpdateRequest(response) {
+        if (Array.isArray(response.comments)) {
+            for (const comment of response.comments) {
+                const { commentId, message, resolveReviewThread } = comment;
+
+                const owner = this.raw.body.repository.owner.login;
+                const repo = this.raw.body.repository.name;
+                const pullNumber = this.raw.body.pull_request.number;
+
+                const url = `https://api.github.com/repos/${owner}/${repo}/pulls/${pullNumber}/comments/${commentId}/replies`;
+                Logger.info(`Provider replying to review comment ${url}`);
+                await this.http.post(url, { body: message });
+
+                if (resolveReviewThread) {
+                    Logger.info(`Provider requested to resolve thread for comment ${commentId}`);
+                    this.resolveThreadFromParentComment({ owner, repo, pullNumber, parentCommentId: commentId })
+                }
+            }
+        }
+    }
+
+    /**
+     * @description Resolving threads is not accesssible via GitHub API. However there is a graphql solution we can do.
+     * @param {*} args 
+     * @returns 
+     */
+    async resolveThreadFromParentComment({ owner, repo, pullNumber, parentCommentId }) {
+        const queryUrl = 'https://api.github.com/graphql';
+        const queryThreads = `
+        query GetThreads($owner: String!, $repo: String!, $pr: Int!) {
+            repository(owner: $owner, name: $repo) {
+            pullRequest(number: $pr) {
+                reviewThreads(first: 100) {
+                nodes {
+                    id
+                    comments(first: 100) {
+                    nodes {
+                        databaseId
+                    }
+                    }
+                }
+                }
+            }
+            }
+        }
+        `;
+
+        const threadData = await this.http.post(queryUrl, {
+            query: queryThreads,
+            variables: { owner, repo, pr: pullNumber }
+        }, {
+            headers: {
+                'Authorization': `Bearer ${this.githubToken}`,
+                'Content-Type': 'application/json'
+            }
+        }).then(res => res.data);
+
+        const threads = threadData?.data?.repository?.pullRequest?.reviewThreads?.nodes;
+
+        if (!threads) {
+            throw new Error('Could not fetch review threads.');
+        }
+
+        const targetThread = threads.find(t =>
+            t.comments.nodes.some(c => c.databaseId === parentCommentId)
+        );
+
+        if (!targetThread) {
+            throw new Error(`Thread not found for comment ID ${parentCommentId}`);
+        }
+
+        const threadId = targetThread.id;
+        const resolveMutation = `
+        mutation ResolveThread($threadId: ID!) {
+            resolveReviewThread(input: {threadId: $threadId}) {
+            thread {
+                isResolved
+            }
+            }
+        }
+        `;
+
+        const result = await this.http.post(queryUrl, {
+            query: resolveMutation,
+            variables: { threadId }
+        }, {
+            headers: {
+                'Authorization': `Bearer ${this.githubToken}`,
+                'Content-Type': 'application/json'
+            }
+        }).then(res => res.data);
+
+        if (result.errors) {
+            Logger.error('Provider failed to resolve thread:', result.errors);
+            throw new Error('GraphQL error when resolving thread.');
+        }
+
+        Logger.info(`Provider is resolving thread ${threadId}.`);
+        return result.data.resolveReviewThread.thread;
+    }
+
+
 
     async leaveReviewComment(payload) {
         const url = `${this.pullRequestUrl}/comments`;
@@ -269,44 +376,46 @@ export class GitHubProvider {
         Logger.info(`Provider submitting final review with status: ${event}`);
         try {
             await this.http.post(url, payload);
-        } catch (e) {
-            console.log(e);
+        } catch (_e) {
+            Logger.error('Provider failed to submit review.')
         }
     }
 
     async doPostProcessingActions(response) {
         Logger.info(`Provider starting post-processing for AI response.`);
 
-        if (Array.isArray(response.comments)) {
-            for (const comment of response.comments) {
-                if (comment.filePath && comment.line) {
-                    try {
-                        await this.leaveReviewComment({
-                            path: comment.filePath,
-                            line: comment.line,
-                            body: comment.message,
-                            commit_id: this.raw.body.pull_request.head.sha,
-                            side: comment.side
-                        });
-                    } catch (e) { console.log(e) }
-                    console.log({
-                        path: comment.filePath,
-                        line: comment.line,
-                        body: comment.message,
-                        commit_id: this.raw.body.pull_request.head.sha,
-                        side: comment.side
-                    })
-
-                } else {
-                    await this.leaveIssueComment(comment.message);
+        if (this.action === 'initial') {
+            if (Array.isArray(response.comments)) {
+                for (const comment of response.comments) {
+                    if (comment.filePath && comment.line) {
+                        try {
+                            await this.leaveReviewComment({
+                                path: comment.filePath,
+                                line: comment.line,
+                                body: `${comment.message} You can discuss alternatives or make a change to trigger a re-review. When all threads are resolved -- the agent will approve.`,
+                                commit_id: this.raw.body.pull_request.head.sha,
+                                side: comment.side
+                            });
+                        } catch (e) {
+                            console.log(e);
+                            Logger.error('Provider failed to submit review comment.')
+                        }
+                    } else {
+                        await this.leaveIssueComment(comment.message);
+                    }
                 }
             }
+        } else if (this.action === 'update') {
+            await this.responseToUpdateRequest(response);
+            //resolveThreadFromParentComment
         }
 
         const reviewEvent = response.approved ? 'APPROVE' : 'COMMENT';
-        await this.submitReview(reviewEvent, response.baseMessage);
+        if (response.baseMessage) {
+            await this.submitReview(reviewEvent, response.baseMessage);
+        }
 
-        Logger.info('Provider post-processing complete. Review has been submitted.');
+        Logger.info(`Provider post-processing complete. ${response.baseMessage ? 'Review has been submitted.' : ''}`);
     }
 
     async addBotAsReviewer(botUsername) {

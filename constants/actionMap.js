@@ -18,5 +18,8 @@ export const actionMap = {
     },
     'synchronize': (req) => {
         return 'update';
+    },
+    'submitted': (req) => {
+        return 'update';
     }
 }

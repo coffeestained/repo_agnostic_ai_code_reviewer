@@ -5,6 +5,7 @@ import { Core } from './providers/Core.js';
 import 'dotenv/config';
 import { Logger } from './lib/logger.js';
 import { actionMap } from './constants/actionMap.js';
+import { ignoredUsers } from './constants/ignoredUsers.js';
 
 const coreService = new Core();
 
@@ -19,7 +20,8 @@ app.post('/webhooks', async (req, res) => {
     Logger.info(`Code Review Agent Webhook Activated. raw: ${req.body.action}`);
     try {
         const actionMapped = actionMap[req.body.action] ? actionMap[req.body.action](req) : undefined;
-        if (actionMapped) {
+        if (ignoredUsers.includes(req.body.sender.login)) Logger.info(`Code Review Agent Webhook will not respond to ignored users.`);
+        else if (actionMapped) {
             const provider = coreService.parseProviderFromRequest(req, actionMapped);
             if (!provider) throw "Bad Request";
             Logger.info(`Provider ${provider.constructor.name} activated. action: ${actionMapped}`);

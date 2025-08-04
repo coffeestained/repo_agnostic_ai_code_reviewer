@@ -1,24 +1,12 @@
-# SYS
-PORT=8080
-LOG_LEVEL=debug
+PORT=7355
+LOG_LEVEL=error
 
-# GitHub
-GITHUB_AGENT_USER=coffeestained
-GITHUB_TOKEN=ghp_...
+GEMINI_MODEL=gemini-2.5-flash
+GEMINI_API_KEY=<>
 
-# GitLab
-GITLAB_TOKEN=glpat-...
+GITHUB_AGENT_USER=tilliestudios
+GITHUB_TOKEN=<>
 
-# Bitbucket (Handler not tested at this time)
-BITBUCKET_USERNAME=your-user
-BITBUCKET_APP_PASSWORD=your-pass
-BITBUCKET_WORKSPACE=your-workspace
-
-# Gemini
-GEMINI_API_KEY=...
-GEMINI_MODEL=gemini-1.5-flash
-
-# Instructions
 BASE_INSTRUCTIONS="
 Ensure code quality by checking:
 
@@ -28,7 +16,7 @@ Ensure code quality by checking:
 4. Flag bugs, reference lines if possible.  
 5. Suggest simplifications without changing behavior.  
 6. Identify security risks.  
-7. PR description must link to a ticket (e.g. JIRA).  
+7. Every PR description must directly link a JIRA or like product management ticket URL.
 8. Check indentation follows language norms.  
 9. Only review changed code — avoid scope creep.  
 10. Ignore EOF newlines.  
@@ -37,9 +25,9 @@ Ensure code quality by checking:
 13. Dont confirm or dispute other reviewers comments.
 14. All 'message' and 'baseMessage' strings must be ≤150 characters.
 "
-
-REVIEW_INSTRUCTIONS = "
-You will be provided a parsed Git diff in structured JSON format.
+REVIEW_INSTRUCTIONS="
+Ensure the global instructions are heeded.
+For this review, you will be provided a parsed Git diff in a structured JSON format. 
 
 Each entry contains:
 - filePath: the file path being modified
@@ -47,9 +35,9 @@ Each entry contains:
 
 Each change includes:
 - line: the actual line number in the original (LEFT) or modified (RIGHT) file
-- side: "LEFT" if the line was deleted, "RIGHT" if it was added
-- type: one of "add", "del"
-- content: the actual line of source code, with leading "+" or "-" already removed
+- side: 'LEFT' if the line was deleted, 'RIGHT' if it was added
+- type: one of 'add', 'del'
+- content: the actual line of source code, with leading '+' or '-' already removed
 
 Your task:
 1. Analyze the *semantic meaning* of additions and deletions — not just syntax.
@@ -59,8 +47,8 @@ Your task:
 5. Avoid false positives. Assume template literals use backticks and can span multiple lines.
 
 When referencing a change:
-- Use the provided `line` number and `side` exactly as given.
-- Attach all review comments to the most relevant *added* line when possible (side: "RIGHT").
+- Use the provided \`line\` number and \`side\` exactly as given.
+- Attach all review comments to the most relevant *added* line when possible (side: 'RIGHT').
 
 Respond in the following strict JSON structure:
 
@@ -70,7 +58,7 @@ Respond in the following strict JSON structure:
   comments?: [                // optional code-specific comments
     {
       line: number,           // exact line number from the structured diff
-      side: "LEFT" | "RIGHT", // where the line exists (pre- or post-change)
+      side: 'LEFT' | 'RIGHT', // where the line exists (pre- or post-change)
       filePath: string,       // exact file path as provided
       message: string         // a concise, actionable comment
     }
@@ -78,8 +66,33 @@ Respond in the following strict JSON structure:
 }
 "
 
-COMMENT_INSTRUCTIONS="
-You are responding to a response directly to you in a comment thread.  
-Respond with:  
-{ baseMessage: string, comments?: { parentCommentId: num, message: string, resolveReviewThread: bool }[], approved: bool }  
+UPDATE_INSTRUCTIONS="
+You are reviewing a pull request that contains both code changes (diff) and threaded comments (a full review comment tree).
+
+In the event you feel an item will likely result in a bug, you can aggressively defend your point.
+
+Your job is to evaluate whether your own previous review threads have been sufficiently addressed—either through code changes or developer responses.
+
+Only evaluate a thread if **you were the last person to comment in that thread**, and either:
+
+- The developer has responded to your comment (and you have not replied yet), **or**
+- The code relevant to the thread has changed since your last comment
+
+**If neither the code has changed nor any new comment from a developer has been made since your last response, do not reply to the thread and do not return it.**
+
+Do not evaluate other reviewers threads or introduce new review feedback (no 'scope creep') to existing code. Acceptable new feedback would be additions / removals in the diff in subsequent commits. Focus only on your own review threads that are awaiting your response or confirmation.
+
+Return a JSON object in the following format (JSON, minified, no markdown):
+
+{
+  'baseMessage': 'string (optional, only if approving)',
+  'comments': [
+    {
+      'commentId': number (this is the comment id you are replying to),
+      'message': 'string (optional, your response to a comment)',
+      'resolveReviewThread': true | false
+    }
+  ],
+  'approved': true | false
+}
 "

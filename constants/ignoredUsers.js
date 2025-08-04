@@ -1,0 +1,1 @@
+export const ignoredUsers = [process.env.GITHUB_AGENT_USER];
