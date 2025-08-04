@@ -443,7 +443,7 @@ export class GitHubProvider {
         }
 
         const reviewEvent = response.approved ? 'APPROVE' : 'COMMENT';
-        if (response.baseMessage) {
+        if (response.baseMessage || response.approved) {
             await this.submitReview(reviewEvent, response.baseMessage);
         }
 
