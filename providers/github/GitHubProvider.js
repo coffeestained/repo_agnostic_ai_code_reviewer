@@ -299,7 +299,7 @@ export class GitHubProvider {
 
                 const url = `https://api.github.com/repos/${owner}/${repo}/pulls/${pullNumber}/comments/${commentId}/replies`;
                 Logger.info(`Provider replying to review comment ${url}`);
-                console.log(commentId, message, resolveReviewThread)
+
                 await this.http.post(url, { body: message });
 
                 if (resolveReviewThread) {
