@@ -133,13 +133,12 @@ export class GitHubProvider {
                 .filter(review => review.body);
 
             // 4. Combine and transform all comments into a unified format
-            console.log(reviewComments);
             const allComments = [
                 ...reviewBodyComments.map(c => this.transformReviewToComment(c)),
                 ...issueComments.map(c => this.transformComment(c)),
                 ...reviewComments.map(c => this.transformComment(c))
             ];
-            return;
+
             // 5. Build and return the final hierarchical tree
             const tree = this.buildCommentTree(allComments);
             return tree;

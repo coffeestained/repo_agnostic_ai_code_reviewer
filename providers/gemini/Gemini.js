@@ -13,24 +13,27 @@ export async function doGeminiResponse(diff, description, actionType, commentTre
     if (!allowedGeminiActionsMap.hasOwnProperty(actionType)) throw "Bad action type";
     const prompt = {
         agentName,
-        globalInstructions: process.env.BASE_INSTRUCTIONS,
+        globalInstructions: prompts.BASE_INSTRUCTIONS,
         actionInstructions: prompts[allowedGeminiActionsMap[actionType]],
         diff,
         description,
         commentTree
     }
 
-    Logger.info(`Provider processing gemini request: ${JSON.stringify(prompt)}`);
+    Logger.info(`Provider processing gemini request starting. ${process.env.GEMINI_MODEL}`);
     const model = genAI.getGenerativeModel({ model: process.env.GEMINI_MODEL });
     const result = await model.generateContent(JSON.stringify(prompt));
     const response = result.response.text();
-
+    Logger.info(`Provider processing gemini request gathered.`);
     let formatted = response;
+    console.log(response);
     try {
         if (asJson) formatted = JSON.parse(response);
-    } catch {
+    } catch (e) {
+        Logger.error(`Provider processing gemini format issue. ${e}`);
         throw new Error('Provider experienced parsing issue with message from LLM.');
     }
+    Logger.info(`Provider processing gemini returning.`);
     return formatted;
 }
 
