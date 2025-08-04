@@ -1,33 +1,38 @@
+import 'dotenv/config';
 import { GoogleGenerativeAI } from '@google/generative-ai';
+import { Logger } from '../../lib/logger.js';
+import { prompts } from '../../constants/prompts.js';
 
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
 const allowedGeminiActionsMap = {
-    'review': 'REVIEW_INSTRUCTIONS',
-    'comment': 'COMMENT_INSTRUCTIONS'
+    'initial': 'REVIEW_INSTRUCTIONS',
+    'update': 'UPDATE_INSTRUCTIONS'
 };
 
-export async function doGeminiResponse(diff, description, actionType = 'review') {
+export async function doGeminiResponse(diff, description, actionType, commentTree, agentName = 'UNK', asJson = true) {
     if (!allowedGeminiActionsMap.hasOwnProperty(actionType)) throw "Bad action type";
-    const prompt = ```
-        Global Instructions: 
-        ${process.env.BASE_INSTRUCTIONS} 
+    const prompt = {
+        agentName,
+        globalInstructions: prompts.BASE_INSTRUCTIONS,
+        actionInstructions: prompts[allowedGeminiActionsMap[actionType]],
+        diff,
+        description,
+        commentTree
+    }
 
-        Action Instructions: 
-        ${process.env[allowedGeminiActionsMap[actionType]]} 
-
-        Diff: 
-        ${diff}
-
-        Description: 
-        ${description}
-    ```;
+    Logger.info(`Provider processing gemini request starting. ${process.env.GEMINI_MODEL}`);
     const model = genAI.getGenerativeModel({ model: process.env.GEMINI_MODEL });
-    const result = await model.generateContent(prompt);
-    const text = result.response.text();
-    return _formatResponse(text);
+    const result = await model.generateContent(JSON.stringify(prompt));
+    const response = result.response.text();
+    Logger.info(`Provider processing gemini request gathered.`);
+    let formatted = response;
+    try {
+        if (asJson) formatted = JSON.parse(response);
+    } catch (e) {
+        Logger.error(`Provider processing gemini format issue. ${e}`);
+        throw new Error('Provider experienced parsing issue with message from LLM.');
+    }
+    Logger.info(`Provider processing gemini returning.`);
+    return formatted;
 }
 
-function _formatResponse(text) {
-    // Convert LLM response to array of comment objects
-    return [];
-}

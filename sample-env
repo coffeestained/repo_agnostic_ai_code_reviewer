@@ -1,54 +1,8 @@
-# SYS
-PORT=8080
-LOG_LEVEL=debug
+PORT=7355
+LOG_LEVEL=error
 
-# GitHub
-GITHUB_TOKEN=ghp_...
-GITHUB_OWNER=your-org
+GEMINI_MODEL=gemini-2.5-flash
+GEMINI_API_KEY=<>
 
-# GitLab
-GITLAB_TOKEN=glpat-...
-GITLAB_OWNER=your-group
-
-# Bitbucket (Handler not tested at this time)
-BITBUCKET_USERNAME=your-user
-BITBUCKET_APP_PASSWORD=your-pass
-BITBUCKET_WORKSPACE=your-workspace
-
-# Gemini
-GEMINI_API_KEY=...
-GEMINI_MODEL=gemini-1.5-flash
-
-# Instruction(s)
-BASE_INSTRUCTIONS="
-You should be ensuring the quality of the code satisfies the following:
-
-1. Summarize the changes made in a clear bullet-point list.
-
-2. Is the new or modified code easy to understand and well-structured?
-
-3. Does it use meaningful names and comments to explain logic and intent?
-
-4. Identify any bugs, referencing specific lines if possible.
-
-5. Are there any areas where the code could be simplified without changing behavior? Provide examples.
-
-6. Are there any potential security concerns in the code?
-
-7. The MR description always needs a ticket linked to it from any work tracking / ticket or project management tool such as JIRA.
-"
-
-REVIEW_INSTRUCTIONS="
-This is a newly opened pull-request.
-Review this code diff using your base instructions.
-Return your response as a basic a string using markdown.
-"
-
-COMMENT_INSTRUCTIONS="
-This is a comment to one of your review comments.
-Be reasonable and determine your next course of action.
-If you are leaving a response:
-Return your response in the following format { message: String }. The message should be a string using markdown.
-If you are approving:
-Return your response in the following format { message?: String, approve: true }. The message is optional can be be a string using markdown.
-"
+GITHUB_AGENT_USER=tilliestudios
+GITHUB_TOKEN=<>
