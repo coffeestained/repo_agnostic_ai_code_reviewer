@@ -3,7 +3,7 @@ import { HttpProvider } from '../http/HttpProvider.js';
 export class GitLabProvider {
     constructor(req, action) {
         this.http = new HttpProvider({
-            Authorization: `Bearer ${process.env.BITBUCKET_TOKEN}`,
+            Authorization: `Bearer ${process.env.GITLAB_TOKEN}`,
         });
 
         this.action = action;
