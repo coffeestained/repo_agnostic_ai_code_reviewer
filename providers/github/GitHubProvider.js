@@ -397,7 +397,8 @@ export class GitHubProvider {
                                 side: comment.side
                             });
                         } catch (e) {
-                            Logger.error('Provider failed to submit review comment.')
+                            Logger.error('Provider failed to submit review comment.');
+                            Logger.debug(`Provider failed to submit review comment details ${e}.`)
                         }
                     } else {
                         await this.leaveIssueComment(comment.message);
