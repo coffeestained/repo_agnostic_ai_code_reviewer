@@ -9,28 +9,16 @@ const allowedGeminiActionsMap = {
 
 export async function doGeminiResponse(diff, description, actionType, commentTree, agentName = 'UNK', asJson = true) {
     if (!allowedGeminiActionsMap.hasOwnProperty(actionType)) throw "Bad action type";
-    const prompt = `
-        Agent Name: 
-        ${agentName}
-
-        Global Instructions: 
-        ${process.env.BASE_INSTRUCTIONS} 
-
-        Action Instructions: 
-        ${process.env[allowedGeminiActionsMap[actionType]]} 
-
-        Start Diff --
-        ${JSON.stringify(diff, null, 2)}
-        End Diff -- 
-
-        Description: 
-        ${description}
-
-        Current Comment Tree: 
-        ${JSON.stringify(commentTree, null, 2)}
-    `;
+    const prompt = {
+        agentName,
+        globalInstructions: process.env.BASE_INSTRUCTIONS,
+        actionInstructions: process.env[allowedGeminiActionsMap[actionType]],
+        diff,
+        description,
+        commentTree
+    }
     const model = genAI.getGenerativeModel({ model: process.env.GEMINI_MODEL });
-    const result = await model.generateContent(prompt);
+    const result = await model.generateContent(JSON.stringify(prompt));
     const response = result.response.text();
 
     let formatted = response;
