@@ -114,7 +114,10 @@ export class GitHubProvider {
         const pr = webhookBody.pull_request;
 
         // 1. Extract necessary info from the payload
-        const [_, owner, repo, pulls, pullRequestId] = pr.url.split('/');
+        const urlParts = new URL(pr.url).pathname.split('/');
+        const owner = urlParts[2];
+        const repo = urlParts[3];
+        const pullRequestId = parseInt(urlParts[5], 10);
         const issueCommentsUrl = pr.comments_url;
         const reviewCommentsUrl = pr.review_comments_url;
         const reviewsUrl = `${pr.url}/reviews`;
@@ -127,8 +130,6 @@ export class GitHubProvider {
                 this.http.get(reviewCommentsUrl, {}),
                 this.http.get(reviewsUrl, {})
             ])).map((response) => response.data);
-
-            console.log(resolutionMap)
 
             // 3. Transform review summary objects into our standard comment format.
             const reviewBodyComments = reviews
@@ -159,9 +160,9 @@ export class GitHubProvider {
                 nodes {
                     isResolved
                     comments(first: 100) {
-                    nodes {
-                        id
-                    }
+                        nodes {
+                            id
+                        }
                     }
                 }
                 }
@@ -171,8 +172,7 @@ export class GitHubProvider {
         `;
 
         const variables = { owner, repo, pullNumber };
-
-        const response = await this.httpGraphQL.post('/graphql', { query, variables });
+        const response = await this.http.post('https://api.github.com/graphql', { query, variables });
         const threads = response.data.data.repository.pullRequest.reviewThreads.nodes;
 
         const resolutionMap = {};
