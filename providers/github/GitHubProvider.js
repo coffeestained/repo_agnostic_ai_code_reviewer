@@ -3,21 +3,27 @@ import parse from 'parse-diff';
 import { HttpProvider } from '../http/HttpProvider.js';
 import { doGeminiResponse } from '../gemini/Gemini.js';
 import { Logger } from '../../lib/logger.js';
-import e from 'express';
 
 export class GitHubProvider {
     _AGENT_USER = process.env.GITHUB_AGENT_USER;
 
-    action;
+    // Used in State as needed
     raw;
+    action;
     repoUrl;
-    pullRequestUrl;
     latestCommitHash;
-
+    pullRequestUrl;
+    pullNumber;
+    owner;
+    repo;
+    reviewCommentsUrl;
+    reviewsUrl;
     description;
+    issueUrl;
+
+    // LLM Prompt Items
     comments = [];
     diff;
-
 
     constructor(req, action) {
         this.http = new HttpProvider({
@@ -26,18 +32,25 @@ export class GitHubProvider {
         });
 
         this.raw = req;
+
+        const pr = req.body.pull_request;
         this.action = action;
         this.repoUrl = req.body.repository.url;
-        this.pullRequestUrl = req.body.pull_request.url;
-        this.pullRequestId = req.body.pull_request.id;
         this.latestCommitHash = req.body.after;
+        this.pullRequestUrl = pr.url;
+        this.pullNumber = pr.number;
+        this.owner = pr.base.repo.owner.login;
+        this.repo = pr.base.repo.name;
+        this.reviewCommentsUrl = pr.review_comments_url;
+        this.reviewsUrl = `${pr.url}/reviews`;
+        this.description = pr.body;
+        this.issueUrl = pr.issue_url;
     }
 
     async processRequest() {
         if (!(await this.validateAuth())) return;
         Logger.info(`Provider has access to repository`);
 
-        const pullDescription = true;
         const pullComments = ['initial', 'update'].includes(this.action);
         const pullDiff = ['initial', 'update'].includes(this.action);
         if (pullComments) {
@@ -45,7 +58,7 @@ export class GitHubProvider {
             Logger.debug(`Provider processing comments`, JSON.stringify(this.comments, null, 2));
         }
         if (pullDiff) {
-            this.diff = parse((await this.http.get(this.raw.body.pull_request.url, { Accept: "application/vnd.github.v3.diff" })).data).map(file => {
+            this.diff = parse((await this.http.get(this.pullRequestUrl, { Accept: "application/vnd.github.v3.diff" })).data).map(file => {
                 const changes = [];
                 for (const chunk of file.chunks) {
                     let oldLine = chunk.oldStart;
@@ -84,20 +97,17 @@ export class GitHubProvider {
             });
             Logger.debug(`Provider processing diff`, JSON.stringify(this.diff, null, 2));
         }
-        if (pullDescription) {
-            this.description = this.raw.body.pull_request.body;
-            Logger.debug(`Provider processing description`, JSON.stringify(this.description, null, 2));
-        }
+
 
         if (!(await this.validateAction())) return;
 
-        Logger.info(`Provider action is required for ${this.pullRequestId}. Proceeding to NL generation.`);
+        Logger.info(`Provider action is required for ${this.pullNumber}. Proceeding to NL generation.`);
 
         const response = await doGeminiResponse(this.diff, this.description, this.action, this.comments, process.env.GITHUB_AGENT_USER);
         Logger.info(`Provider action processed. Proceeding to post-processing.`);
         Logger.debug(`Provider action processed. Proceeding to post-processing. ${JSON.stringify(response, null, 2)}`);
 
-        if (this.action === 'initial') await this.addBotAsReviewer(this._AGENT_USER);
+        if (this.action === 'initial') await this.addBotAsReviewer();
 
         await this.doPostProcessingActions(response);
     }
@@ -111,23 +121,13 @@ export class GitHubProvider {
      * @param {object} webhookBody - The full req.body from the GitHub pull_request webhook.
      * @returns {Promise<Array<object>>} A promise that resolves to the comment tree.
      */
-    async buildCommentTreeFromWebhook(webhookBody) {
-        const pr = webhookBody.pull_request;
-
-        // 1. Extract necessary info from the payload
-        const owner = pr.base.repo.owner.login;
-        const repo = pr.base.repo.name;
-        const pullRequestId = pr.number;
-        const issueCommentsUrl = pr.comments_url;
-        const reviewCommentsUrl = pr.review_comments_url;
-        const reviewsUrl = `${pr.url}/reviews`;
-
+    async buildCommentTreeFromWebhook() {
         try {
             // 2. Make parallel API calls to fetch all three content types.
             const [resolutionMap, reviewComments, reviews] = (await Promise.all([
-                this.fetchThreadResolutions(owner, repo, pullRequestId),
-                this.http.get(reviewCommentsUrl, {}),
-                this.http.get(reviewsUrl, {})
+                this.fetchThreadResolutions(),
+                this.http.get(this.reviewCommentsUrl, {}),
+                this.http.get(this.reviewsUrl, {})
             ])).map((response) => response.data);
 
             // 3. Transform review summary objects into our standard comment format.
@@ -144,13 +144,12 @@ export class GitHubProvider {
             const tree = this.buildCommentTree(allComments);
 
             return tree;
-
         } catch (error) {
             throw error; // Re-throw to be handled by the caller
         }
     }
 
-    async fetchThreadResolutions(owner, repo, pullNumber) {
+    async fetchThreadResolutions() {
         const query = `
         query GetReviewThreads($owner: String!, $repo: String!, $pullNumber: Int!) {
             repository(owner: $owner, name: $repo) {
@@ -171,7 +170,7 @@ export class GitHubProvider {
         }
         `;
 
-        const variables = { owner, repo, pullNumber };
+        const variables = { owner: this.owner, repo: this.repo, pullNumber: this.pullNumber };
         const response = await this.http.post('https://api.github.com/graphql', { query, variables });
         const threads = response.data.data.repository.pullRequest.reviewThreads.nodes;
 
@@ -210,17 +209,6 @@ export class GitHubProvider {
         pathOfChange: comment.path,
         lineOfChange: comment.original_line,
         children: [],
-    });
-
-    /**
-     * Transforms a GitHub API issue.
-     */
-    transformIssue = (comment) => ({
-        id: comment.id,
-        body: comment.body,
-        userName: comment.user.login,
-        commentDateTime: comment.created_at,
-        isIssue: true,
     });
 
     /**
@@ -291,18 +279,14 @@ export class GitHubProvider {
             for (const comment of response.comments) {
                 const { commentId, message, resolveReviewThread } = comment;
 
-                const owner = this.raw.body.repository.owner.login;
-                const repo = this.raw.body.repository.name;
-                const pullNumber = this.raw.body.pull_request.number;
-
-                const url = `https://api.github.com/repos/${owner}/${repo}/pulls/${pullNumber}/comments/${commentId}/replies`;
+                const url = `https://api.github.com/repos/${this.owner}/${this.repo}/pulls/${this.pullNumber}/comments/${commentId}/replies`;
                 Logger.info(`Provider replying to review comment ${url}`);
 
                 await this.http.post(url, { body: message });
 
                 if (resolveReviewThread) {
                     Logger.info(`Provider requested to resolve thread for comment ${commentId}`);
-                    this.resolveThreadFromParentComment({ owner, repo, pullNumber, parentCommentId: commentId })
+                    this.resolveThreadFromParentComment(commentId)
                 }
             }
         }
@@ -313,7 +297,7 @@ export class GitHubProvider {
      * @param {*} args 
      * @returns 
      */
-    async resolveThreadFromParentComment({ owner, repo, pullNumber, parentCommentId }) {
+    async resolveThreadFromParentComment(parentCommentId) {
         const queryUrl = 'https://api.github.com/graphql';
         const queryThreads = `
         query GetThreads($owner: String!, $repo: String!, $pr: Int!) {
@@ -336,7 +320,7 @@ export class GitHubProvider {
 
         const threadData = await this.http.post(queryUrl, {
             query: queryThreads,
-            variables: { owner, repo, pr: pullNumber }
+            variables: { owner: this.owner, repo: this.repo, pr: this.pullNumber }
         }, {
             headers: {
                 'Authorization': `Bearer ${this.githubToken}`,
@@ -395,7 +379,7 @@ export class GitHubProvider {
     }
 
     async leaveIssueComment(body) {
-        const url = `${this.raw.body.pull_request.issue_url}/comments`;
+        const url = `${this.issueUrl}/comments`;
         const payload = { body };
         Logger.info(`Provider posting general issue comment.`);
         await this.http.post(url, payload);
@@ -476,20 +460,16 @@ export class GitHubProvider {
         Logger.info(`Provider post-processing complete. ${response.baseMessage ? 'Review has been submitted.' : ''}`);
     }
 
-    async addBotAsReviewer(botUsername) {
-        const owner = this.raw.body.repository.owner.login;
-        const repo = this.raw.body.repository.name;
-        const pullNumber = this.raw.body.pull_request.number;
-
-        const url = `https://api.github.com/repos/${owner}/${repo}/pulls/${pullNumber}/requested_reviewers`;
+    async addBotAsReviewer() {
+        const url = `https://api.github.com/repos/${this.owner}/${this.repo}/pulls/${this.pullNumber}/requested_reviewers`;
         const payload = {
-            reviewers: [botUsername],
+            reviewers: [this._AGENT_USER],
         };
 
         try {
-            Logger.info(`Provider adding '${botUsername}' as a reviewer...`);
+            Logger.info(`Provider adding '${this._AGENT_USER}' as a reviewer...`);
             await this.http.post(url, payload);
-            Logger.info(`Provider successfully added '${botUsername}' as a reviewer.`);
+            Logger.info(`Provider successfully added '${this._AGENT_USER}' as a reviewer.`);
         } catch (error) {
             Logger.error(`Provider could not add bot as reviewer: ${error.message}`);
             throw error;
