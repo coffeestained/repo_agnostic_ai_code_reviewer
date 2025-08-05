@@ -28,7 +28,9 @@ export async function doGeminiResponse(diff, description, actionType, commentTre
     let formatted = response;
     try {
         if (asJson) {
-            const implicitReplaceMarkDown = formatted.startsWith('```') ? response.match(/```json\s*\n([\s\S]*?)\n```/)?.[1] : response;
+            const implicitReplaceMarkDown = (
+                formatted.startsWith('```') ? response.match(/```json\s*\n([\s\S]*?)\n```/)?.[1] : response
+            ) ?? response;
             formatted = JSON.parse(implicitReplaceMarkDown);
         }
     } catch (e) {
