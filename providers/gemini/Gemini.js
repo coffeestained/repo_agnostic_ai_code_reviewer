@@ -27,7 +27,7 @@ export async function doGeminiResponse(diff, description, actionType, commentTre
     Logger.info(`Provider processing gemini request gathered.`);
     let formatted = response;
     try {
-        if (asJson) formatted = JSON.parse(response.replace(/^```json\s*\n[\s\S]*?\n```$/gm, ''));
+        if (asJson) formatted = JSON.parse(response.match(/```json\s*\n([\s\S]*?)\n```/)?.[1] ?? '');
     } catch (e) {
         Logger.error(`Provider processing gemini format issue. ${response}`);
         Logger.error(`Provider processing gemini format issue. ${e}`);
