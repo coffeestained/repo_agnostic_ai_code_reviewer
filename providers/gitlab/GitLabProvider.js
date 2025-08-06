@@ -4,7 +4,7 @@ import { HttpProvider } from '../http/HttpProvider.js';
 import { doGeminiResponse } from '../gemini/Gemini.js';
 import { Logger } from '../../lib/logger.js';
 
-export class GitlabProvider {
+export class GitLabProvider {
     _AGENT_USER = process.env.GITLAB_AGENT_USER;
 
     // Used in State as needed

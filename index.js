@@ -17,7 +17,7 @@ app.use(express.json());
 app.get('/health', (_, res) => res.status(200).send('OK'));
 
 app.post('/webhooks', async (req, res) => {
-    Logger.info(`Code Review Agent Webhook Activated. raw: ${req.body.action}`);
+    Logger.info(`Code Review Agent Webhook Activated. raw: ${JSON.stringify(req.body)}`);
     try {
         const actionMapped = actionMap[req.body.action] ? actionMap[req.body.action](req) : undefined;
         if (ignoredUsers.includes(req.body.sender.login)) Logger.info(`Code Review Agent Webhook will not respond to ignored users.`);
