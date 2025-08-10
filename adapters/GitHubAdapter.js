@@ -1,3 +1,5 @@
+import { BaseRepoAdapter } from "./Base.js";
+
 export class GitHubAdapter extends BaseRepoAdapter {
     constructor(payload) {
         super(payload);
