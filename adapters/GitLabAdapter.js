@@ -1,4 +1,4 @@
-import { BaseRepoAdapter } from "./Base.js";
+import { BaseRepoAdapter, NormalizedUser } from "./Base.js";
 
 export class GitLabAdapter extends BaseRepoAdapter {
     constructor(payload) {
@@ -15,7 +15,10 @@ export class GitLabAdapter extends BaseRepoAdapter {
             reviewers: [],
             repo: {},
             diffUrl: null,
-            threadsUrl: null
+            threadsUrl: null,
+            headers: {
+                'PROVIDER-TOKEN': `${process.env.GITLAB_TOKEN}`,
+            }
         };
 
         const objectKind = this.payload.object_kind;

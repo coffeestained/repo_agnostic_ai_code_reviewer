@@ -1,4 +1,4 @@
-import { BaseRepoAdapter } from "./Base.js";
+import { BaseRepoAdapter, NormalizedUser } from "./Base.js";
 
 export class BitbucketAdapter extends BaseRepoAdapter {
     constructor(payload) {
@@ -15,7 +15,10 @@ export class BitbucketAdapter extends BaseRepoAdapter {
             reviewers: [],
             repo: {},
             diffUrl: null,
-            threadsUrl: null
+            threadsUrl: null,
+            headers: {
+                Authorization: `Bearer ${process.env.BITBUCKET_TOKEN}`,
+            }
         };
 
         const eventKey = this.payload.eventKey;

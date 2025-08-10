@@ -1,4 +1,4 @@
-import { BaseRepoAdapter } from "./Base.js";
+import { BaseRepoAdapter, NormalizedUser } from "./Base.js";
 
 export class GitHubAdapter extends BaseRepoAdapter {
     constructor(payload) {
@@ -15,7 +15,11 @@ export class GitHubAdapter extends BaseRepoAdapter {
             reviewers: [],
             repo: {},
             diffUrl: null,
-            threadsUrl: null
+            threadsUrl: null,
+            headers: {
+                Authorization: `Bearer ${process.env.GITHUB_TOKEN}`,
+                Accept: "application/vnd.github.v3+json"
+            }
         };
 
         const rawAction = this.payload.action;

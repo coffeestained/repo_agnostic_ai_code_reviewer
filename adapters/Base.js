@@ -38,3 +38,15 @@ export class BaseRepoAdapter {
         throw new Error("Subclass must implement 'threadsUrl' getter.");
     }
 }
+
+export class NormalizedUser {
+    constructor(id, login, name = null) {
+        this.id = id;
+        this.login = login;
+        this.name = name;
+    }
+
+    toString() {
+        return `User(id=${this.id}, name='${this.name}', login='${this.login}')`;
+    }
+}
