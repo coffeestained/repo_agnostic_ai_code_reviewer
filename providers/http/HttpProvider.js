@@ -10,18 +10,18 @@ export class HttpProvider {
     }
 
     async get(url, headers = {}) {
-        return axios.get(url, { headers: { ...this.authHeaders, ...headers } }).catch(err => { Logger.error(err); throw err; });
+        return axios.get(url, { headers: { ...this.authHeaders, ...headers } }).catch(err => { Logger.error(err?.message); throw err; });
     }
 
     async post(url, data = {}, headers = {}) {
-        return axios.post(url, data, { headers: { ...this.authHeaders, ...headers } }).catch(err => { Logger.error(err); throw err; });
+        return axios.post(url, data, { headers: { ...this.authHeaders, ...headers } }).catch(err => { Logger.error(err?.message); throw err; });
     }
 
     async patch(url, data = {}, headers = {}) {
-        return axios.patch(url, data, { headers: { ...this.authHeaders, ...headers } }).catch(err => { Logger.error(err); throw err; });
+        return axios.patch(url, data, { headers: { ...this.authHeaders, ...headers } }).catch(err => { Logger.error(err?.message); throw err; });
     }
 
     async put(url, data = {}, headers = {}) {
-        return axios.put(url, data, { headers: { ...this.authHeaders, ...headers } }).catch(err => { Logger.error(err); throw err; });
+        return axios.put(url, data, { headers: { ...this.authHeaders, ...headers } }).catch(err => { Logger.error(err?.message); throw err; });
     }
 }
