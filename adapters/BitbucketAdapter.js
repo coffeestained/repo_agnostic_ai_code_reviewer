@@ -18,8 +18,14 @@ export class BitbucketAdapter extends BaseRepoAdapter {
             threadsUrl: null,
             headers: {
                 Authorization: `Bearer ${process.env.BITBUCKET_TOKEN}`,
-            }
+            },
+            agent: process.env.BITBUCKET_AGENT_USER,
+            commentProperties: ['id', 'in_reply_to_id', 'path', 'diff_hunk', 'side', 'line', 'position', 'created_at', 'user.login']
         };
+
+        if (this.payload.pullrequest?.source?.commit?.hash) {
+            data.headSha = this.payload.pullrequest.source.commit.hash;
+        }
 
         const eventKey = this.payload.eventKey;
         switch (eventKey) {
@@ -59,9 +65,9 @@ export class BitbucketAdapter extends BaseRepoAdapter {
         const { workspace, name } = data.repo;
         const prId = data.pullRequestNumber;
         if (workspace && name && prId) {
-            const baseUrl = `${data.baseApiUrl}/repositories/${workspace}/${name}/pullrequests/${prId}`;
-            data.diffUrl = `${baseUrl}/diff`;
-            data.threadsUrl = `${baseUrl}/comments`;
+            data.prUrl = `${data.baseApiUrl}/repositories/${workspace}/${name}/pullrequests/${prId}`;
+            data.diffUrl = `${data.prUrl}/diff`;
+            data.threadsUrl = `${data.prUrl}/comments`;
         }
 
         return data;
@@ -73,6 +79,22 @@ export class BitbucketAdapter extends BaseRepoAdapter {
     get action() { return this._normalizedData.action; }
     get author() { return this._normalizedData.author; }
     get reviewers() { return this._normalizedData.reviewers; }
+    get prUrl() { return this._normalizedData.prUrl; }
     get diffUrl() { return this._normalizedData.diffUrl; }
     get threadsUrl() { return this._normalizedData.threadsUrl; }
+    get headers() { return this._normalizedData.headers; }
+    get sha() { return this._normalizedData.headSha; }
+    get commentProperties() { return this._normalizedData.commentProperties; }
+
+    async isAuthenticated() {
+        try {
+            const res = await this.http.get(
+                `${this.baseApiUrl}/repositories/${this._normalizedData.repo.owner}/${this._normalizedData.repo.name}`,
+                this.headers
+            );
+            return res.status === 200;
+        } catch (err) {
+            return false;
+        }
+    }
 }

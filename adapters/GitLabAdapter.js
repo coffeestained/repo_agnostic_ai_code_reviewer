@@ -18,8 +18,14 @@ export class GitLabAdapter extends BaseRepoAdapter {
             threadsUrl: null,
             headers: {
                 'PROVIDER-TOKEN': `${process.env.GITLAB_TOKEN}`,
-            }
+            },
+            agent: process.env.GITLAB_AGENT_USER,
+            commentProperties: ['id', 'in_reply_to_id', 'path', 'diff_hunk', 'side', 'line', 'position', 'created_at', 'user.login']
         };
+
+        if (this.payload.object_attributes?.last_commit?.id) {
+            data.headSha = this.payload.object_attributes.last_commit.id;
+        }
 
         const objectKind = this.payload.object_kind;
         const objectAttrs = this.payload.object_attributes || {};
@@ -60,9 +66,9 @@ export class GitLabAdapter extends BaseRepoAdapter {
         const projectId = data.repo.id;
         const mrIid = data.pullRequestNumber;
         if (projectId && mrIid) {
-            const baseUrl = `${data.baseApiUrl}/projects/${projectId}/merge_requests/${mrIid}`;
-            data.diffUrl = `${baseUrl}/changes`;
-            data.threadsUrl = `${baseUrl}/discussions`;
+            data.prUrl = `${data.baseApiUrl}/projects/${projectId}/merge_requests/${mrIid}`;
+            data.diffUrl = `${data.prUrl}/changes`;
+            data.threadsUrl = `${data.prUrl}/discussions`;
         }
 
         return data;
@@ -74,6 +80,22 @@ export class GitLabAdapter extends BaseRepoAdapter {
     get action() { return this._normalizedData.action; }
     get author() { return this._normalizedData.author; }
     get reviewers() { return this._normalizedData.reviewers; }
+    get prUrl() { return this._normalizedData.prUrl; }
     get diffUrl() { return this._normalizedData.diffUrl; }
     get threadsUrl() { return this._normalizedData.threadsUrl; }
+    get headers() { return this._normalizedData.headers; }
+    get sha() { return this._normalizedData.headSha; }
+    get commentProperties() { return this._normalizedData.commentProperties; }
+
+    async isAuthenticated() {
+        try {
+            const res = await this.http.get(
+                `${this.baseApiUrl}/projects/${encodeURIComponent(this._normalizedData.repo.owner + '/' + this._normalizedData.repo.name)}`,
+                this.headers
+            );
+            return res.status === 200;
+        } catch (err) {
+            return false;
+        }
+    }
 }
