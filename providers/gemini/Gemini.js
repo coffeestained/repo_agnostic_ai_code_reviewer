@@ -23,7 +23,7 @@ export async function doGeminiResponse(diff, description, actionType, commentTre
     const model = genAI.getGenerativeModel({ model: process.env.GEMINI_MODEL });
     const result = await model.generateContent(JSON.stringify(prompt));
     const response = result.response.text();
-    Logger.info(`Provider processing gemini request gathered.`);
+    Logger.info(`Provider processing gemini request prompt generated. \n \n ${JSON.stringify(prompt, null, 2)}`);
     let formatted = response;
     try {
         if (asJson) {

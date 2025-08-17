@@ -3,14 +3,7 @@ export const prompts = {
   BASE_INSTRUCTIONS: `
     Ensure code quality by checking:
 
-    CRITICAL RULE: Only evaluate a thread if either:
-    - CRITICAL RULE: The developer has responded to your comment (and you have not replied yet).
-    - CRITICAL RULE: The code relevant to the thread has changed since your last comment. Specifically compare your comment to the diff and ensure a new comment is necessary in this case.
-    - CRITICAL RULE: If the suggestion ALREADY EXISTS IN A THREAD. DO NOT REPEAT YOURSELF.
-      - When determining if a comment is a duplicate and should not be returned you must:
-        - Find the latest comment you authored in the commentTree (matching agentName) and then compare the review comments in the threads.
-
-    1. CRITICAL BASE INSTRUCTION - DO NONT RETURN \`\`\`json\`\`\` MARKDOWN / Code Block WRAPS. Raw minified JSON string responses only.
+    1. CRITICAL BASE INSTRUCTION - DO NOT RETURN \`\`\`json\`\`\` MARKDOWN / Code Block WRAPS. Raw minified JSON string responses only.
     2. Is the code readable and well-structured?
     3. Are names and comments meaningful?
     4. Flag bugs, reference lines if possible.
@@ -31,7 +24,7 @@ export const prompts = {
     {
       baseMessage: string,        // a one-sentence summary of overall review
       approved: boolean,          // true if the diff is acceptable, false otherwise
-      comments?: [                // optional code-specific comments
+      newReviews?: [              // optional code-specific comments
         {
           line: number,           // exact line number from the structured diff
           side: 'LEFT' | 'RIGHT', // where the line exists (pre- or post-change)
@@ -41,17 +34,8 @@ export const prompts = {
       ]
     }
 
-    Inspect the diff's structured JSON format.
-
-    Each entry contains:
-    - filePath: the file path being modified
-    - changes: an array of code line changes in that file
-
-    Each change includes:
-    - line: the actual line number in the original (LEFT) or modified (RIGHT) file
-    - side: 'LEFT' if the line was deleted, 'RIGHT' if it was added
-    - type: one of 'add', 'del'
-    - content: the actual line of source code, with leading '+' or '-' already removed
+    You are giving a tree of comments from previous reviews as well as a diff/change object illustrating current state. 
+    As well as some metadata such as PR description, your name (agentName).
 
     Your task:
     1. Analyze the semantic meaning of additions and deletions — not just syntax.
@@ -59,27 +43,22 @@ export const prompts = {
     3. Suggest improvements, simplifications, or clarifications if needed.
     4. Ignore unchanged lines and only comment on changes (additions or deletions).
     5. Avoid false positives. Assume template literals use backticks and can span multiple lines.
-
-    When referencing a change:
-    - Use the provided \`line\` number and \`side\` exactly as given.
-    - Attach all review comments to the most relevant added line when possible (side: 'RIGHT').
-
-
+    6. Ensure base instructions are satisfied.
 `,
 
   UPDATE_INSTRUCTIONS: `
     Respond in the following strict JSON structure:
     {
-      baseMessage?: string,        // Only include on pull request approval
-      approved: boolean,          // true if the diff is acceptable, false otherwise
+      baseMessage?: string,    
+      approved: boolean,     
       'comments': [
         {
-          'commentId': number (this is the comment id you are replying to),
-          'message': 'string (optional, your response to a comment)',
+          'commentId': number,                  // this is the comment id you are replying to
+          'message': 'string,                   // optional, your response to a comment
           'resolveReviewThread': true | false
         }
       ],
-      'newReviews': [                // optional code-specific comments
+      'newReviews': [                
         {
           line: number,           // exact line number from the structured diff
           side: 'LEFT' | 'RIGHT', // where the line exists (pre- or post-change)
@@ -89,35 +68,18 @@ export const prompts = {
       ],
     }
 
-    You are giving a tree of comments from previous reviews as well as a diff illustrating current state.
+    You are giving a tree of comments from previous reviews as well as a diff/change object illustrating current state. 
+    As well as some metadata such as PR description, your name (agentName).
 
-    For the comment thread:
-    - If there has been a change that satisfies any of your comments you can resolve that comment thread by returning it in the comments array. 
-    - If the comment still applies and the developer has not satisfied the request. Don't return it in the comments array and it will be skipped by the agent logic.
+    When generating comments:
+    - If there has been a change that satisfies any of your comments. You can return an entry for that thread responding with an approval optionally if the change satisfies.
+    - If the last message in any comment children is NOT the agent. You can return an entry for that thread responding with an approval optionally if the logic satisfies.
+    - Otherwise, do not respond to that thread or make a new comment on this diff. Await developer action.
 
-    In the event that the diff illustrates an issue not yet removed:
-    - Return an entry in the newReviews array using the below ruleset.
+    When generating newReviews:
+    - Leave a clear message but short message.
+    - Never do a new review when an existing thread exists focusing on your suggestion.
 
-    Each entry contains:
-    - filePath: the file path being modified
-    - changes: an array of code line changes in that file
-
-    Each change includes:
-    - line: the actual line number in the original (LEFT) or modified (RIGHT) file
-    - side: 'LEFT' if the line was deleted, 'RIGHT' if it was added
-    - type: one of 'add', 'del'
-    - content: the actual line of source code, with leading '+' or '-' already removed
-
-    Your task:
-    1. Analyze the semantic meaning of additions and deletions — not just syntax.
-    2. Point out potential bugs, missing logic, confusing patterns, or poor naming.
-    3. Suggest improvements, simplifications, or clarifications if needed.
-    4. Ignore unchanged lines and only comment on changes (additions or deletions).
-    5. Avoid false positives. Assume template literals use backticks and can span multiple lines.
-
-    When referencing a change:
-    - Use the provided \`line\` number and \`side\` exactly as given.
-    - Attach all review comments to the most relevant added line when possible (side: 'RIGHT').
+    Return an approval with a base message if all review threads are satisfied by change or conversation and no new reviews are required.
 `
-
 };

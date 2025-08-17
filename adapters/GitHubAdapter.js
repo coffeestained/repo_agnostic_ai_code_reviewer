@@ -23,7 +23,7 @@ export class GitHubAdapter extends BaseRepoAdapter {
                 Accept: "application/vnd.github.v3+json"
             },
             agent: process.env.GITHUB_AGENT_USER,
-            commentProperties: ['id', 'in_reply_to_id', 'path', 'diff_hunk', 'side', 'line', 'position', 'created_at', 'user.login']
+            commentProperties: ['id', 'in_reply_to_id', 'body', 'path', 'side', 'line', 'position', 'created_at', 'user.login']
         };
 
         const rawAction = this.payload.action;
@@ -115,7 +115,9 @@ export class GitHubAdapter extends BaseRepoAdapter {
                 `${this.prUrl}`,
                 { ...this.headers, Accept: "application/vnd.github.v3.diff" }
             );
-            return res.status === 200 && this.parse(res.data).map(file => {
+            if (res.status !== 200) return false;
+
+            const diffs = this.parse(res.data).map(file => {
                 const changes = [];
                 for (const chunk of file.chunks) {
                     let oldLine = chunk.oldStart;
@@ -124,17 +126,17 @@ export class GitHubAdapter extends BaseRepoAdapter {
                     for (const change of chunk.changes) {
                         let side, line;
 
-                        if (change.type === 'normal') {
+                        if (change.type === "normal") {
                             oldLine++;
                             newLine++;
-                            continue; // skip unchanged lines
+                            continue;
                         }
 
-                        if (change.type === 'add') {
-                            side = 'RIGHT';
+                        if (change.type === "add") {
+                            side = "RIGHT";
                             line = newLine++;
-                        } else if (change.type === 'del') {
-                            side = 'LEFT';
+                        } else if (change.type === "del") {
+                            side = "LEFT";
                             line = oldLine++;
                         }
 
@@ -147,11 +149,14 @@ export class GitHubAdapter extends BaseRepoAdapter {
                     }
                 }
 
-                this.diff = {
-                    filePath: file.to.replace(/^b\//, ''),
+                return {
+                    filePath: file.to.replace(/^b\//, ""),
                     changes,
                 };
             });
+
+            this.diff = diffs;
+            return diffs;
         } catch (err) {
             return false;
         }
@@ -189,11 +194,10 @@ export class GitHubAdapter extends BaseRepoAdapter {
         this.llmResponse = await this.doLLM(this.diff, "", actionType, this.tree, this._normalizedData.agent);
     }
 
-    async doPostProcessingActions(response) {
-        Logger.info(`Provider starting post-processing for AI response.`);
-
-        if (Array.isArray(response.comments)) {
-            for (const comment of response.comments) {
+    async doPostProcessingActions() {
+        const response = this.llmResponse;
+        if (Array.isArray(response.newReviews)) {
+            for (const comment of response.newReviews) {
                 if (comment.filePath && comment.line) {
                     try {
                         await this.postReviewComments({
@@ -210,16 +214,14 @@ export class GitHubAdapter extends BaseRepoAdapter {
             }
         }
 
-        if (Array.isArray(response.newReviews)) {
-            for (const comment of response.newReviews) {
-                if (comment.filePath && comment.line) {
+        if (Array.isArray(response.comments)) {
+            for (const comment of response.comments) {
+                if (comment.commentId && comment.message) {
                     try {
                         await this.postReviewCommentUpdates({
-                            path: comment.filePath,
-                            line: comment.line,
-                            body: `${comment.message} You can discuss the request or make a change to trigger a re-review. When all threads are resolved -- the agent will approve.`,
-                            commit_id: this.sha,
-                            side: comment.side
+                            commentId: comment.commentId,
+                            resolveReviewThread: comment.resolveReviewThread,
+                            message: `${comment.message} You can discuss the request or make a change to trigger a re-review. When all threads are resolved -- the agent will approve.`,
                         });
                     } catch (e) {
                         throw e;
@@ -229,7 +231,7 @@ export class GitHubAdapter extends BaseRepoAdapter {
         }
 
         const reviewEvent = response.approved ? 'APPROVE' : 'COMMENT';
-        if (response.baseMessage || response.approved) {
+        if (response.approved) {
             await this.submitReview(reviewEvent, response.baseMessage);
         }
     }
@@ -239,7 +241,6 @@ export class GitHubAdapter extends BaseRepoAdapter {
         const payload = {
             reviewers: [this._normalizedData.agent],
         };
-        console.log(payload, url);
         try {
             await this.http.post(url, payload, this.headers);
         } catch (error) {
@@ -264,12 +265,73 @@ export class GitHubAdapter extends BaseRepoAdapter {
         await this.http.post(url, { body: message }, this.headers);
 
         if (resolveReviewThread) {
-            //this.resolveThreadFromParentComment(commentId)
-            // This is going to need custom graphql request
+            this.resolveThreadFromParentComment(commentId)
         }
 
     }
 
+    async resolveThreadFromParentComment(parentCommentId) {
+        const queryUrl = 'https://api.github.com/graphql';
+        const queryThreads = `
+            query GetThreads($owner: String!, $repo: String!, $pr: Int!) {
+                repository(owner: $owner, name: $repo) {
+                pullRequest(number: $pr) {
+                    reviewThreads(first: 100) {
+                    nodes {
+                        id
+                        comments(first: 100) {
+                        nodes {
+                            databaseId
+                        }
+                        }
+                    }
+                    }
+                }
+                }
+            }
+            `;
+
+        const threadData = await this.http.post(queryUrl, {
+            query: queryThreads,
+            variables: { owner: this.owner, repo: this.repo, pr: this.pullNumber }
+        }, this.headers).then(res => res.data);
+
+        const threads = threadData?.data?.repository?.pullRequest?.reviewThreads?.nodes;
+
+        if (!threads) {
+            throw new Error('Could not fetch review threads.');
+        }
+
+        const targetThread = threads.find(t =>
+            t.comments.nodes.some(c => c.databaseId === parentCommentId)
+        );
+
+        if (!targetThread) {
+            throw new Error(`Thread not found for comment ID ${parentCommentId}`);
+        }
+
+        const threadId = targetThread.id;
+        const resolveMutation = `
+            mutation ResolveThread($threadId: ID!) {
+                resolveReviewThread(input: {threadId: $threadId}) {
+                thread {
+                    isResolved
+                }
+                }
+            }
+            `;
+
+        const result = await this.http.post(queryUrl, {
+            query: resolveMutation,
+            variables: { threadId }
+        }, this.headers).then(res => res.data);
+
+        if (result.errors) {
+            throw new Error('GraphQL error when resolving thread.');
+        }
+
+        return result.data.resolveReviewThread.thread;
+    }
 
     async submitReview(event, message) {
         const url = `${this.reviewsUrl}`;
