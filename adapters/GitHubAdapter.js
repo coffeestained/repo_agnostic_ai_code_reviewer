@@ -203,7 +203,7 @@ export class GitHubAdapter extends BaseRepoAdapter {
                         await this.postReviewComments({
                             path: comment.filePath,
                             line: comment.line,
-                            body: `${comment.message} You can discuss the request or make a change to trigger a re-review. When all threads are resolved -- the agent will approve.`,
+                            body: `${comment.message}`,
                             commit_id: this.sha,
                             side: comment.side
                         });
@@ -221,7 +221,7 @@ export class GitHubAdapter extends BaseRepoAdapter {
                         await this.postReviewCommentUpdates({
                             commentId: comment.commentId,
                             resolveReviewThread: comment.resolveReviewThread,
-                            message: `${comment.message} You can discuss the request or make a change to trigger a re-review. When all threads are resolved -- the agent will approve.`,
+                            message: `${comment.message}`,
                         });
                     } catch (e) {
                         throw e;
