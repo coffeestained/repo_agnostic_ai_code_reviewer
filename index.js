@@ -31,8 +31,12 @@ app.post('/webhooks', async (req, res) => {
             Logger.debug(`Adapter ${adapter.constructor.name} activated`, JSON.stringify(req.body.pull_request, null, 2));
 
             adapter.getLLMResponse(actionMapped).then(async () => {
+                Logger.info(`Adapter ${adapter.constructor.name} received ${JSON.stringify(adapter.llmResponse, null, 2)}`);
                 await adapter.postNewReviewer();
-                console.log(adapter.llmResponse)
+                Logger.info(`Adapter ${adapter.constructor.name} agent added as a reviewer.`);
+                await adapter.doPostProcessingActions();
+                Logger.info(`Adapter ${adapter.constructor.name} agent doing post processing with response.`);
+
             }).catch((e) => Logger.error(`Issue doing response generation. ${e?.message}`));
         }
         res.status(200).send('Webhook request processed');
