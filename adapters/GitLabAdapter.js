@@ -14,61 +14,92 @@ export class GitLabAdapter extends BaseRepoAdapter {
             author: null,
             reviewers: [],
             repo: {},
+            projectId: null,
+            mergeRequestIid: null,
             diffUrl: null,
             threadsUrl: null,
+            reviewersUrl: null,
+            reviewsUrl: null,
             headers: {
-                'PROVIDER-TOKEN': `${process.env.GITLAB_TOKEN}`,
+                "PRIVATE-TOKEN": process.env.GITLAB_TOKEN,
+                "Content-Type": "application/json"
             },
             agent: process.env.GITLAB_AGENT_USER,
-            commentProperties: ['id', 'in_reply_to_id', 'path', 'diff_hunk', 'side', 'line', 'position', 'created_at', 'user.login']
+            commentProperties: ['id', 'parent_id', 'body', 'position.new_path', 'position.position_type',
+                'position.new_line', 'position.old_line', 'created_at', 'author.username']
         };
 
-        if (this.payload.object_attributes?.last_commit?.id) {
-            data.headSha = this.payload.object_attributes.last_commit.id;
+        // Map GitLab event types to normalized actions
+        const eventType = this.payload.object_attributes?.action || this.payload.event_type;
+        switch (eventType) {
+            case "open": data.action = "OPENED"; break;
+            case "reopen": data.action = "OPENED"; break;
+            case "update":
+                // Check if it's a code update or just metadata
+                if (this.payload.object_attributes?.oldrev !== this.payload.object_attributes?.newrev) {
+                    data.action = "UPDATED_CODE";
+                } else {
+                    data.action = "UPDATED";
+                }
+                break;
+            case "approved": data.action = "APPROVED"; break;
+            case "unapproved": data.action = "UNAPPROVED"; break;
+            case "merge": data.action = "MERGED"; break;
+            case "close": data.action = "CLOSED"; break;
+            case "note":
+                // GitLab uses 'note' for comments
+                data.action = "COMMENTED";
+                break;
+            default:
+                data.action = eventType ? eventType.toUpperCase() : "UNKNOWN";
         }
 
-        const objectKind = this.payload.object_kind;
-        const objectAttrs = this.payload.object_attributes || {};
-        const rawAction = objectAttrs.action;
+        // Handle merge request data
+        const mrData = this.payload.object_attributes || this.payload.merge_request || {};
+        data.mergeRequestIid = mrData.iid || null;
+        data.mergeRequestId = mrData.id || null;
 
-        if (objectKind === "merge_request" && rawAction === "open") { data.action = "OPENED"; }
-        else if (objectKind === "note") { data.action = "COMMENTED"; }
-        else if (objectKind === "merge_request" && rawAction === "update") {
-            if (objectAttrs.oldrev) { data.action = "UPDATED_CODE"; }
-            else if (this.payload.reviewers) { data.action = "REVIEW_REQUESTED"; }
-            else if (this.payload.changes?.work_in_progress !== undefined) { data.action = "UNDRAFTED"; }
-            else { data.action = "UPDATED_METADATA"; }
-        } else {
-            data.action = rawAction ? rawAction.toUpperCase() : "UNKNOWN";
+        // Get the latest SHA
+        if (mrData.last_commit) {
+            data.headSha = mrData.last_commit.id;
+        } else if (this.payload.object_attributes?.newrev) {
+            data.headSha = this.payload.object_attributes.newrev;
         }
 
-        if (this.payload.merge_request) {
-            data.pullRequestNumber = this.payload.merge_request.iid || null;
-        } else {
-            data.pullRequestNumber = objectAttrs.iid || null;
-        }
-
+        // Extract project information
         const projectData = this.payload.project || {};
-        data.repo.id = projectData.id || objectAttrs.source_project_id || null;
+        if (projectData.id) {
+            data.projectId = projectData.id;
+            data.repo = {
+                owner: projectData.namespace,
+                name: projectData.name,
+                path_with_namespace: projectData.path_with_namespace
+            };
+        }
 
+        // Extract author/actor information
         const actorData = this.payload.user || {};
-        if (actorData) {
+        if (actorData.id) {
             data.author = new NormalizedUser(actorData.id, actorData.username, actorData.name);
         }
 
-        if (data.action === "REVIEW_REQUESTED" && this.payload.reviewers) {
-            for (const reviewerData of this.payload.reviewers) {
-                data.reviewers.push(new NormalizedUser(reviewerData.id, reviewerData.username, reviewerData.name));
-            }
+        // Handle assignees as reviewers in GitLab
+        if (mrData.assignees && Array.isArray(mrData.assignees)) {
+            data.reviewers = mrData.assignees.map(assignee =>
+                new NormalizedUser(assignee.id, assignee.username, assignee.name)
+            );
         }
 
         // Populate API URLs
-        const projectId = data.repo.id;
-        const mrIid = data.pullRequestNumber;
+        const projectId = data.projectId;
+        const mrIid = data.mergeRequestIid;
         if (projectId && mrIid) {
             data.prUrl = `${data.baseApiUrl}/projects/${projectId}/merge_requests/${mrIid}`;
-            data.diffUrl = `${data.prUrl}/changes`;
+            data.diffUrl = `${data.prUrl}/diffs`;
             data.threadsUrl = `${data.prUrl}/discussions`;
+            data.reviewersUrl = `${data.prUrl}`;  // GitLab uses the MR endpoint for assignees
+            data.reviewsUrl = `${data.prUrl}/approvals`;
+            data.notesUrl = `${data.prUrl}/notes`;
         }
 
         return data;
@@ -76,26 +107,296 @@ export class GitLabAdapter extends BaseRepoAdapter {
 
     get provider() { return this._normalizedData.provider; }
     get baseApiUrl() { return this._normalizedData.baseApiUrl; }
-    get pullRequestNumber() { return this._normalizedData.pullRequestNumber; }
+    get pullRequestNumber() { return this._normalizedData.mergeRequestIid; }
     get action() { return this._normalizedData.action; }
     get author() { return this._normalizedData.author; }
     get reviewers() { return this._normalizedData.reviewers; }
     get prUrl() { return this._normalizedData.prUrl; }
     get diffUrl() { return this._normalizedData.diffUrl; }
     get threadsUrl() { return this._normalizedData.threadsUrl; }
+    get reviewersUrl() { return this._normalizedData.reviewersUrl; }
+    get reviewsUrl() { return this._normalizedData.reviewsUrl; }
     get headers() { return this._normalizedData.headers; }
     get sha() { return this._normalizedData.headSha; }
     get commentProperties() { return this._normalizedData.commentProperties; }
+    get projectId() { return this._normalizedData.projectId; }
+    get mergeRequestIid() { return this._normalizedData.mergeRequestIid; }
+
+    get llmResponse() { return this._llmResponse; }
+    set llmResponse(val) { this._llmResponse = val; }
+
+    get diff() { return this._diff; }
+    set diff(val) { this._diff = val; }
+
+    get tree() { return this._tree; }
+    set tree(val) { this._tree = val; }
 
     async isAuthenticated() {
         try {
             const res = await this.http.get(
-                `${this.baseApiUrl}/projects/${encodeURIComponent(this._normalizedData.repo.owner + '/' + this._normalizedData.repo.name)}`,
-                this.headers
+                `${this.baseApiUrl}/projects/${this.projectId}`,
+                { headers: this.headers }
             );
             return res.status === 200;
         } catch (err) {
             return false;
+        }
+    }
+
+    async getDiff() {
+        try {
+            const res = await this.http.get(
+                this.diffUrl,
+                { headers: this.headers }
+            );
+            if (res.status !== 200) return false;
+
+            const gitlabDiffs = res.data;
+            const diffs = gitlabDiffs.map(file => {
+                const changes = [];
+
+                // Parse the diff string similar to GitHub
+                if (file.diff) {
+                    const lines = file.diff.split('\n');
+                    let oldLine = 0;
+                    let newLine = 0;
+
+                    for (const line of lines) {
+                        if (line.startsWith('@@')) {
+                            // Parse hunk header
+                            const match = line.match(/@@ -(\d+),?\d* \+(\d+),?\d* @@/);
+                            if (match) {
+                                oldLine = parseInt(match[1]);
+                                newLine = parseInt(match[2]);
+                            }
+                            continue;
+                        }
+
+                        let side, lineNum, type;
+
+                        if (line.startsWith('+')) {
+                            side = "RIGHT";
+                            lineNum = newLine++;
+                            type = "add";
+                        } else if (line.startsWith('-')) {
+                            side = "LEFT";
+                            lineNum = oldLine++;
+                            type = "del";
+                        } else {
+                            oldLine++;
+                            newLine++;
+                            continue;
+                        }
+
+                        changes.push({
+                            side,
+                            line: lineNum,
+                            type,
+                            content: line.substring(1),
+                        });
+                    }
+                }
+
+                return {
+                    filePath: file.new_path || file.old_path,
+                    changes,
+                };
+            });
+
+            this.diff = diffs;
+            return diffs;
+        } catch (err) {
+            this.logger.error(`Error getting diff: ${err.message}`);
+            return false;
+        }
+    }
+
+    async getCommentTree() {
+        try {
+            const discussions = (await this.http.get(
+                this.threadsUrl,
+                { headers: this.headers }
+            )).data;
+
+            const tree = [];
+
+            for (const discussion of discussions) {
+                if (!discussion.notes || discussion.notes.length === 0) continue;
+
+                const rootNote = discussion.notes[0];
+                const commentData = {
+                    id: rootNote.id,
+                    body: rootNote.body,
+                    created_at: rootNote.created_at,
+                    'author.username': rootNote.author?.username,
+                    children: []
+                };
+
+                // Add position data if it's a diff comment
+                if (rootNote.position) {
+                    commentData['position.new_path'] = rootNote.position.new_path;
+                    commentData['position.new_line'] = rootNote.position.new_line;
+                    commentData['position.old_line'] = rootNote.position.old_line;
+                    commentData['position.position_type'] = rootNote.position.position_type;
+                }
+
+                // Add replies as children
+                for (let i = 1; i < discussion.notes.length; i++) {
+                    const reply = discussion.notes[i];
+                    commentData.children.push({
+                        id: reply.id,
+                        parent_id: rootNote.id,
+                        body: reply.body,
+                        created_at: reply.created_at,
+                        'author.username': reply.author?.username,
+                    });
+                }
+
+                tree.push(commentData);
+            }
+
+            this.tree = tree;
+            return tree;
+        } catch (err) {
+            this.logger.error(`Error getting comment tree: ${err.message}`);
+            return [];
+        }
+    }
+
+    async getLLMResponse(actionType) {
+        this.llmResponse = await this.doLLM(this.diff, "", actionType, this.tree, this._normalizedData.agent);
+    }
+
+    async doPostProcessingActions() {
+        const response = this.llmResponse;
+
+        if (Array.isArray(response.newReviews)) {
+            for (const comment of response.newReviews) {
+                if (comment.filePath && comment.line) {
+                    try {
+                        await this.postReviewComments({
+                            body: comment.message,
+                            position: {
+                                base_sha: this.payload.object_attributes?.diff_refs?.base_sha,
+                                start_sha: this.payload.object_attributes?.diff_refs?.start_sha,
+                                head_sha: this.sha,
+                                position_type: "text",
+                                new_path: comment.filePath,
+                                new_line: comment.line,
+                                old_line: comment.side === "LEFT" ? comment.line : null
+                            }
+                        });
+                    } catch (e) {
+                        this.logger.error(`Error posting review comment: ${e.message}`);
+                        throw e;
+                    }
+                }
+            }
+        }
+
+        if (Array.isArray(response.comments)) {
+            for (const comment of response.comments) {
+                if (comment.commentId && comment.message) {
+                    try {
+                        await this.postReviewCommentUpdates({
+                            commentId: comment.commentId,
+                            resolveReviewThread: comment.resolveReviewThread,
+                            message: comment.message,
+                        });
+                    } catch (e) {
+                        this.logger.error(`Error updating comment: ${e.message}`);
+                        throw e;
+                    }
+                }
+            }
+        }
+
+        if (response.approved) {
+            await this.submitReview("approved", response.baseMessage);
+        }
+    }
+
+    async postNewReviewer() {
+        const url = this.reviewersUrl;
+        const payload = {
+            assignee_ids: [this._normalizedData.agent]
+        };
+
+        try {
+            await this.http.put(url, payload, { headers: this.headers });
+        } catch (error) {
+            this.logger.error(`Error adding reviewer: ${error.message}`);
+            throw error;
+        }
+    }
+
+    async postReviewComments(payload) {
+        const url = this.threadsUrl;
+
+        try {
+            const res = await this.http.post(url, payload, { headers: this.headers });
+            return res.status === 201 ? res.data : false;
+        } catch (error) {
+            this.logger.error(`Error posting review comment: ${error.message}`);
+            throw error;
+        }
+    }
+
+    async postReviewCommentUpdates(payload) {
+        const { commentId, message, resolveReviewThread } = payload;
+
+        // Find the discussion that contains this comment
+        const discussions = (await this.http.get(
+            this.threadsUrl,
+            { headers: this.headers }
+        )).data;
+
+        let discussionId = null;
+        for (const discussion of discussions) {
+            if (discussion.notes.some(note => note.id === commentId)) {
+                discussionId = discussion.id;
+                break;
+            }
+        }
+
+        if (!discussionId) {
+            throw new Error(`Discussion not found for comment ${commentId}`);
+        }
+
+        // Post reply to the discussion
+        const url = `${this.threadsUrl}/${discussionId}/notes`;
+        await this.http.post(url, { body: message }, { headers: this.headers });
+
+        if (resolveReviewThread) {
+            await this.resolveThread(discussionId);
+        }
+    }
+
+    async resolveThread(discussionId) {
+        const url = `${this.threadsUrl}/${discussionId}`;
+
+        try {
+            await this.http.put(url, { resolved: true }, { headers: this.headers });
+        } catch (error) {
+            this.logger.error(`Error resolving thread: ${error.message}`);
+            throw error;
+        }
+    }
+
+    async submitReview(event, message) {
+        // Post a general comment
+        const notesUrl = `${this.prUrl}/notes`;
+        await this.http.post(notesUrl, { body: message }, { headers: this.headers });
+
+        // If approved, add approval
+        if (event === "approved") {
+            const approvalUrl = `${this.prUrl}/approve`;
+            try {
+                await this.http.post(approvalUrl, {}, { headers: this.headers });
+            } catch (e) {
+                this.logger.error(`Error submitting approval: ${e.message}`);
+                throw e;
+            }
         }
     }
 }
