@@ -57,7 +57,7 @@ export class GitLabAdapter extends BaseRepoAdapter {
         const mrData = this.payload.object_attributes || this.payload.merge_request || {};
         data.mergeRequestId = this.payload?.object_attributes?.iid || this.payload?.merge_request?.iid;
 
-        if (this.payload.merge_request.last_commit) {
+        if (this.payload.merge_request?.last_commit) {
             data.headSha = this.payload.merge_request.last_commit.id;
         } else if (this.payload.object_attributes.last_commit) {
             data.headSha = this.payload.object_attributes.last_commit.id;
