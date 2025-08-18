@@ -54,7 +54,7 @@ export const prompts = {
       'comments': [
         {
           'commentId': number,                  // this is the comment id you are replying to
-          'message': 'string,                   // optional, your response to a comment
+          'message': string,                   // optional, your response to a comment
           'resolveReviewThread': true | false
         }
       ],
