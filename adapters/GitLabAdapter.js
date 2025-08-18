@@ -58,7 +58,7 @@ export class GitLabAdapter extends BaseRepoAdapter {
         data.mergeRequestId = this.payload?.object_attributes?.iid || this.payload?.merge_request?.iid;
 
         if (this.payload.merge_request?.last_commit) {
-            data.headSha = this.payload.merge_request.last_commit.id;
+            data.headSha = this.payload.merge_request?.last_commit?.id;
         } else if (this.payload.object_attributes.last_commit) {
             data.headSha = this.payload.object_attributes.last_commit.id;
         } else if (this.payload.object_attributes?.newrev) {
@@ -101,7 +101,6 @@ export class GitLabAdapter extends BaseRepoAdapter {
             data.notesUrl = `${data.prUrl}/notes`;
             data.versionsUrl = `${data.prUrl}/versions`;
         }
-        console.log(data);
 
         return data;
     }
@@ -271,13 +270,14 @@ export class GitLabAdapter extends BaseRepoAdapter {
         const response = this.llmResponse;
 
         if (Array.isArray(response.newReviews)) {
+            const hashes = (await this.getMergeRequestVersionHashes())
             for (const comment of response.newReviews) {
                 if (comment.filePath && comment.line) {
                     try {
                         await this.postReviewComments({
                             body: comment.message,
                             position: {
-                                ...(await this.getMergeRequestVersions()),
+                                ...hashes,
                                 head_sha: this.sha,
                                 position_type: "text",
                                 new_path: comment.filePath,
@@ -344,7 +344,7 @@ export class GitLabAdapter extends BaseRepoAdapter {
         }
     }
 
-    async getMergeRequestVersions() {
+    async getMergeRequestVersionHashes() {
         const url = this._normalizedData.versionsUrl;
 
         try {
@@ -368,7 +368,6 @@ export class GitLabAdapter extends BaseRepoAdapter {
         const url = this.threadsUrl;
 
         try {
-            console.log(payload);
             const res = await this.http.post(url, payload, this.headers);
             return res.status === 201 ? res.data : false;
         } catch (error) {
