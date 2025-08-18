@@ -15,7 +15,7 @@ export class GitLabAdapter extends BaseRepoAdapter {
             reviewers: [],
             repo: {},
             projectId: null,
-            mergeRequestIid: null,
+            mergeRequestId: null,
             diffUrl: null,
             threadsUrl: null,
             reviewersUrl: null,
@@ -54,14 +54,13 @@ export class GitLabAdapter extends BaseRepoAdapter {
                 data.action = eventType ? eventType.toUpperCase() : "UNKNOWN";
         }
 
-        // Handle merge request data
         const mrData = this.payload.object_attributes || this.payload.merge_request || {};
-        data.mergeRequestIid = mrData.iid || null;
-        data.mergeRequestId = mrData.id || null;
+        data.mergeRequestId = this.payload?.object_attributes?.iid || this.payload?.merge_request?.iid;
 
-        // Get the latest SHA
-        if (mrData.last_commit) {
-            data.headSha = mrData.last_commit.id;
+        if (this.payload.merge_request.last_commit) {
+            data.headSha = this.payload.merge_request.last_commit.id;
+        } else if (this.payload.object_attributes.last_commit) {
+            data.headSha = this.payload.object_attributes.last_commit.id;
         } else if (this.payload.object_attributes?.newrev) {
             data.headSha = this.payload.object_attributes.newrev;
         }
@@ -92,7 +91,7 @@ export class GitLabAdapter extends BaseRepoAdapter {
 
         // Populate API URLs
         const projectId = data.projectId;
-        const mrIid = data.mergeRequestIid;
+        const mrIid = data.mergeRequestId;
         if (projectId && mrIid) {
             data.prUrl = `${data.baseApiUrl}/projects/${projectId}/merge_requests/${mrIid}`;
             data.diffUrl = `${data.prUrl}/diffs`;
@@ -100,14 +99,16 @@ export class GitLabAdapter extends BaseRepoAdapter {
             data.reviewersUrl = `${data.prUrl}`;  // GitLab uses the MR endpoint for assignees
             data.reviewsUrl = `${data.prUrl}/approvals`;
             data.notesUrl = `${data.prUrl}/notes`;
+            data.versionsUrl = `${data.prUrl}/versions`;
         }
+        console.log(data);
 
         return data;
     }
 
     get provider() { return this._normalizedData.provider; }
     get baseApiUrl() { return this._normalizedData.baseApiUrl; }
-    get pullRequestNumber() { return this._normalizedData.mergeRequestIid; }
+    get pullRequestNumber() { return this._normalizedData.mergeRequestId; }
     get action() { return this._normalizedData.action; }
     get author() { return this._normalizedData.author; }
     get reviewers() { return this._normalizedData.reviewers; }
@@ -120,7 +121,7 @@ export class GitLabAdapter extends BaseRepoAdapter {
     get sha() { return this._normalizedData.headSha; }
     get commentProperties() { return this._normalizedData.commentProperties; }
     get projectId() { return this._normalizedData.projectId; }
-    get mergeRequestIid() { return this._normalizedData.mergeRequestIid; }
+    get mergeRequestId() { return this._normalizedData.mergeRequestId; }
 
     get llmResponse() { return this._llmResponse; }
     set llmResponse(val) { this._llmResponse = val; }
@@ -135,7 +136,7 @@ export class GitLabAdapter extends BaseRepoAdapter {
         try {
             const res = await this.http.get(
                 `${this.baseApiUrl}/projects/${this.projectId}`,
-                { headers: this.headers }
+                this.headers
             );
             return res.status === 200;
         } catch (err) {
@@ -147,7 +148,7 @@ export class GitLabAdapter extends BaseRepoAdapter {
         try {
             const res = await this.http.get(
                 this.diffUrl,
-                { headers: this.headers }
+                this.headers
             );
             if (res.status !== 200) return false;
 
@@ -155,7 +156,6 @@ export class GitLabAdapter extends BaseRepoAdapter {
             const diffs = gitlabDiffs.map(file => {
                 const changes = [];
 
-                // Parse the diff string similar to GitHub
                 if (file.diff) {
                     const lines = file.diff.split('\n');
                     let oldLine = 0;
@@ -215,7 +215,7 @@ export class GitLabAdapter extends BaseRepoAdapter {
         try {
             const discussions = (await this.http.get(
                 this.threadsUrl,
-                { headers: this.headers }
+                this.headers
             )).data;
 
             const tree = [];
@@ -277,8 +277,7 @@ export class GitLabAdapter extends BaseRepoAdapter {
                         await this.postReviewComments({
                             body: comment.message,
                             position: {
-                                base_sha: this.payload.object_attributes?.diff_refs?.base_sha,
-                                start_sha: this.payload.object_attributes?.diff_refs?.start_sha,
+                                ...(await this.getMergeRequestVersions()),
                                 head_sha: this.sha,
                                 position_type: "text",
                                 new_path: comment.filePath,
@@ -319,13 +318,48 @@ export class GitLabAdapter extends BaseRepoAdapter {
     async postNewReviewer() {
         const url = this.reviewersUrl;
         const payload = {
-            assignee_ids: [this._normalizedData.agent]
+            reviewer_ids: [await this.getAgentUserId()]
         };
 
         try {
-            await this.http.put(url, payload, { headers: this.headers });
+            await this.http.put(url, payload, this.headers);
         } catch (error) {
             this.logger.error(`Error adding reviewer: ${error.message}`);
+            throw error;
+        }
+    }
+
+    async getAgentUserId() {
+        const url = `${this.baseApiUrl}/users?username=${this._normalizedData.agent}`;
+
+        try {
+            const res = await this.http.get(url, this.headers);
+            if (res.data && res.data.length > 0) {
+                return res.data[0].id;
+            }
+            throw new Error(`Agent user ${this._normalizedData.agent} not found`);
+        } catch (error) {
+            this.logger.error(`Error getting agent user ID: ${error.message}`);
+            throw error;
+        }
+    }
+
+    async getMergeRequestVersions() {
+        const url = this._normalizedData.versionsUrl;
+
+        try {
+            const res = await this.http.get(url, this.headers);
+            if (Array.isArray(res.data) && res.data.length > 0) {
+                // The most recent version is usually first
+                const latest = res.data[0];
+                return {
+                    base_sha: latest.base_commit_sha || latest.start_commit_sha,
+                    start_sha: latest.start_commit_sha,
+                };
+            }
+            throw new Error(`No versions found for MR at ${url}`);
+        } catch (error) {
+            this.logger.error(`Error getting merge request versions: ${error.message}`);
             throw error;
         }
     }
@@ -334,7 +368,8 @@ export class GitLabAdapter extends BaseRepoAdapter {
         const url = this.threadsUrl;
 
         try {
-            const res = await this.http.post(url, payload, { headers: this.headers });
+            console.log(payload);
+            const res = await this.http.post(url, payload, this.headers);
             return res.status === 201 ? res.data : false;
         } catch (error) {
             this.logger.error(`Error posting review comment: ${error.message}`);
@@ -348,7 +383,7 @@ export class GitLabAdapter extends BaseRepoAdapter {
         // Find the discussion that contains this comment
         const discussions = (await this.http.get(
             this.threadsUrl,
-            { headers: this.headers }
+            this.headers
         )).data;
 
         let discussionId = null;
@@ -365,7 +400,7 @@ export class GitLabAdapter extends BaseRepoAdapter {
 
         // Post reply to the discussion
         const url = `${this.threadsUrl}/${discussionId}/notes`;
-        await this.http.post(url, { body: message }, { headers: this.headers });
+        await this.http.post(url, { body: message }, this.headers);
 
         if (resolveReviewThread) {
             await this.resolveThread(discussionId);
@@ -376,7 +411,7 @@ export class GitLabAdapter extends BaseRepoAdapter {
         const url = `${this.threadsUrl}/${discussionId}`;
 
         try {
-            await this.http.put(url, { resolved: true }, { headers: this.headers });
+            await this.http.put(url, { resolved: true }, this.headers);
         } catch (error) {
             this.logger.error(`Error resolving thread: ${error.message}`);
             throw error;
@@ -386,13 +421,13 @@ export class GitLabAdapter extends BaseRepoAdapter {
     async submitReview(event, message) {
         // Post a general comment
         const notesUrl = `${this.prUrl}/notes`;
-        await this.http.post(notesUrl, { body: message }, { headers: this.headers });
+        await this.http.post(notesUrl, { body: message }, this.headers);
 
         // If approved, add approval
         if (event === "approved") {
             const approvalUrl = `${this.prUrl}/approve`;
             try {
-                await this.http.post(approvalUrl, {}, { headers: this.headers });
+                await this.http.post(approvalUrl, {}, this.headers);
             } catch (e) {
                 this.logger.error(`Error submitting approval: ${e.message}`);
                 throw e;

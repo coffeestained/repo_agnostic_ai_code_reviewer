@@ -16,7 +16,7 @@ app.use(express.json());
 app.get('/health', (_, res) => res.status(200).send('OK'));
 
 app.post('/webhooks', async (req, res) => {
-    Logger.debug(`Code Review Agent Webhook Activated. raw: ${JSON.stringify(req.body)}`);
+    Logger.info(`Code Review Agent Webhook Activated. raw: ${JSON.stringify(req.body)}`);
     try {
         const action = getAction(req);
         const actionMapped = action && actionMap[action] ? actionMap[action](req) : undefined;
